@@ -3,6 +3,7 @@ import SwiftUI
 /// Milestone (a) screen: live detector state plus a replay harness.
 struct DebugView: View {
     @Environment(DetectionService.self) private var detection
+    @Environment(ShieldingService.self) private var shielding
     @State private var replayResults: [ReplayResult] = []
 
     var body: some View {
@@ -14,6 +15,17 @@ struct DebugView: View {
                 row("Trip distance", String(format: "%.2f mi", detection.miles))
                 row("GPS mode", detection.trackingMode.rawValue)
                 Button("Request permissions") { detection.requestPermissions() }
+            }
+            Section("Shielding") {
+                row("Shields", shielding.isShielded ? "on" : "off")
+                row("Mode", shielding.strictMode ? "strict" : "block-list")
+                row("Screen Time", shielding.isAuthorized ? "granted" : "not granted")
+                if !shielding.status.isEmpty { row("Last", shielding.status) }
+                NavigationLink("Shield settings") { ShieldSetupView() }
+                Button("Shield now") { shielding.shieldNow() }
+                Button("Unshield") { shielding.unshield() }
+                Button("I'm a passenger") { shielding.imAPassenger() }
+                    .disabled(!shielding.isShielded)
             }
             Section("Replay scenarios (offline, no sensors)") {
                 Button("Run all") { replayResults = Scenario.all.map(ReplayResult.run) }

@@ -33,3 +33,20 @@ Simulator cannot fake CoreMotion, so automotive is never true. Use it to check l
 | 7 | Battery: 1 full day, app installed vs. not | Target < 3% extra drain with no driving |
 
 Record per test: start delay, end delay, false starts, battery %.
+
+# Shielding test plan (milestone b)
+
+## Automated: `ShieldingServiceTests`
+Fake store. Covers: drive start shields + arms safety window, drive end clears, empty block-list does nothing, Strict mode, passenger override lasts one drive, relaunch picks up existing shields, refresh after the monitor clears, settings persist.
+
+## Device (Screen Time does not work in the simulator)
+| # | Test | Pass |
+|---|---|---|
+| 1 | First launch: allow Screen Time, pick Messages + Social | Setup sheet closes on Done |
+| 2 | Debug → Shield now; open Messages | Block screen shows |
+| 3 | Debug → Unshield | Messages opens |
+| 4 | Strict mode, allow Maps + music; Shield now | Only Maps, music, Phone open |
+| 5 | Real drive | Shields on within ~1 min of leaving, off ~5 min after parking |
+| 6 | Mid-drive: I'm a passenger | Shields off; back on next drive |
+| 7 | Shield now, then force-quit app; wait 1 h | Monitor clears shields |
+| 8 | While shielded: Siri / CarPlay read and send a text | Note result |

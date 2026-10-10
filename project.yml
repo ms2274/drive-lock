@@ -6,12 +6,19 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.9"
-    DEVELOPMENT_TEAM: ""   # TODO: set your Team ID
+    DEVELOPMENT_TEAM: 7MP9JX7CM4
 targets:
   DriveLock:
     type: application
     platform: iOS
-    sources: [DriveLock]
+    sources: [DriveLock, Shared]
+    dependencies:
+      - target: DriveLockMonitor
+    entitlements:
+      path: DriveLock/Resources/DriveLock.entitlements
+      properties:
+        com.apple.developer.family-controls: true
+        com.apple.security.application-groups: [group.com.example.drivelock]
     info:
       path: DriveLock/Resources/Info.plist
       properties:
@@ -37,3 +44,22 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.example.drivelock.tests
         GENERATE_INFOPLIST_FILE: YES
+  DriveLockMonitor:
+    type: app-extension
+    platform: iOS
+    sources: [DriveLockMonitor, Shared]
+    info:
+      path: DriveLockMonitor/Info.plist
+      properties:
+        CFBundleDisplayName: DriveLockMonitor
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.deviceactivity.monitor-extension
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).DriveSafetyMonitor
+    entitlements:
+      path: DriveLockMonitor/DriveLockMonitor.entitlements
+      properties:
+        com.apple.developer.family-controls: true
+        com.apple.security.application-groups: [group.com.example.drivelock]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.drivelock.monitor
