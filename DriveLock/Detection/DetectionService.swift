@@ -1,0 +1,136 @@
+import Foundation
+import CoreLocation
+import Observation
+
+struct DebugLogEntry: Identifiable {
+    let id = UUID()
+    let date = Date()
+    let text: String
+}
+
+/// Wires live sensors to the pure DriveDetector and manages battery modes.
+@MainActor @Observable
+final class DetectionService {
+    private(set) var state: DriveState = .idle
+    private(set) var automotive = false
+    private(set) var speedMph: Double = 0
+    private(set) var miles: Double = 0
+    private(set) var trackingMode: TrackingMode = .off
+    private(set) var log: [DebugLogEntry] = []
+
+    /// Fired for consumers (shielding in milestone b, trip recording in c).
+    var onDriveStarted: ((Date) -> Void)?
+    var onDriveEnded: ((_ start: Date, _ end: Date, _ meters: Double) -> Void)?
+
+    private var detector: DriveDetector
+    private let motion = MotionSource()
+    private let location = LocationSource()
+    private var lastFix: CLLocation?
+    private var lastActivity = Date.distantPast
+    private var timer: Timer?
+    private let idleShutdownSeconds: TimeInterval = 180
+
+    init(config: DetectionConfig = .default) {
+        detector = DriveDetector(config: config)
+        motion.onAutomotive = { [weak self] auto, _ in Task { @MainActor in self?.handleAutomotive(auto) } }
+        location.onLocations = { [weak self] locs in Task { @MainActor in self?.handleLocations(locs) } }
+        location.onSignificantWake = { [weak self] in Task { @MainActor in self?.handleWake() } }
+    }
+
+    func requestPermissions() { location.requestAlways() }
+
+    func start() {
+        location.startMonitoring()
+        motion.start()
+        timer?.invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.tick() }
+        }
+        addLog("started (auth: \(location.authorization.rawValue), motion: \(MotionSource.authorization.rawValue))")
+        handleWake()
+    }
+
+    func stop() {
+        timer?.invalidate(); motion.stop(); setMode(.off)
+        addLog("stopped")
+    }
+
+    // MARK: Inputs
+    private func handleWake() {
+        lastActivity = Date()
+        motion.recentAutomotive(since: Date().addingTimeInterval(-300)) { [weak self] auto in
+            Task { @MainActor in
+                guard let self else { return }
+                self.addLog("wake: recent automotive=\(auto)")
+                if auto { self.handleAutomotive(true) }
+            }
+        }
+    }
+
+    private func handleAutomotive(_ auto: Bool) {
+        automotive = auto
+        if auto { lastActivity = Date() }
+        feed(DetectorSample(time: now(), isAutomotive: auto))
+        applyMode()
+    }
+
+    private func handleLocations(_ locs: [CLLocation]) {
+        for loc in locs {
+            guard loc.horizontalAccuracy >= 0, loc.horizontalAccuracy <= detector.config.maxHorizontalAccuracy else { continue }
+            let delta = lastFix.map { loc.distance(from: $0) } ?? 0
+            lastFix = loc
+            let speed = loc.speed >= 0 ? loc.speed : nil
+            if let s = speed { speedMph = s * 2.23694 }
+            feed(DetectorSample(time: loc.timestamp.timeIntervalSinceReferenceDate,
+                                speed: speed, distanceDelta: delta))
+        }
+    }
+
+    private func tick() {
+        feed(DetectorSample(time: now()))
+        // Battery: stop GPS after a quiet spell with no automotive signal.
+        if state == .idle, !automotive, Date().timeIntervalSince(lastActivity) > idleShutdownSeconds,
+           trackingMode != .off {
+            setMode(.off); lastFix = nil
+            addLog("idle: GPS off (significant-change only)")
+        }
+    }
+
+    private func now() -> TimeInterval { Date().timeIntervalSinceReferenceDate }
+
+    private func feed(_ sample: DetectorSample) {
+        for e in detector.ingest(sample) { handle(e) }
+        miles = detector.meters / 1609.344
+    }
+
+    private func handle(_ e: DetectorEvent) {
+        switch e {
+        case .stateChanged(let s):
+            state = s; lastActivity = Date()
+            applyMode()
+            addLog("state → \(s)")
+        case .driveStarted(let t):
+            addLog("DRIVE STARTED")
+            onDriveStarted?(Date(timeIntervalSinceReferenceDate: t))
+        case .driveEnded(let s, let e, let m):
+            addLog(String(format: "DRIVE ENDED %.2f mi", m / 1609.344))
+            onDriveEnded?(Date(timeIntervalSinceReferenceDate: s), Date(timeIntervalSinceReferenceDate: e), m)
+        }
+    }
+
+    private func applyMode() {
+        let want: TrackingMode
+        switch state {
+        case .idle: want = automotive ? .low : trackingMode
+        case .suspected, .driving: want = .high
+        }
+        setMode(want)
+    }
+
+    private func setMode(_ m: TrackingMode) { location.setMode(m); trackingMode = m }
+
+    private func addLog(_ text: String) {
+        log.insert(DebugLogEntry(text: text), at: 0)
+        if log.count > 200 { log.removeLast() }
+    }
+}
