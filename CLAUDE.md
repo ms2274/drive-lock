@@ -12,7 +12,7 @@
 - Process: commit after each milestone; ask before adding deps/features outside spec.
 
 ## Constraints
-- Dev environment is Linux: no Swift toolchain, code is **uncompiled**. First task on Mac: `xcodegen`, build, fix compile errors, run tests.
+- Builds on Mac (Xcode 27, iOS 27 simulator; deployment target iOS 17). Regenerate with `xcodegen`, then `xcodebuild test -scheme DriveLock -destination 'platform=iOS Simulator,name=iPhone 17'`.
 
 ## Open questions / to verify on device
 - Do Siri/CarPlay still read and send texts while Messages is shielded?

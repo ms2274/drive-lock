@@ -25,6 +25,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.example.drivelock
+    scheme:
+      testTargets: [DriveLockTests]
   DriveLockTests:
     type: bundle.unit-test
     platform: iOS
@@ -34,3 +36,4 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.example.drivelock.tests
+        GENERATE_INFOPLIST_FILE: YES
