@@ -3,7 +3,7 @@ import ManagedSettings
 
 /// Names shared by the app and the DriveLockMonitor extension.
 enum AppGroup {
-    static let id = "group.com.example.drivelock"
+    static let id = "group.com.michaelscardena.drivelock"
 }
 
 extension ManagedSettingsStore.Name {

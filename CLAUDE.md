@@ -4,7 +4,7 @@
 - SwiftUI, iOS 17+, SwiftData local-first. Supabase only for auth + leaderboard.
 - **No third-party dependencies.** Supabase via raw REST (URLSession). Project via XcodeGen (`project.yml`).
 - Miles only.
-- Team ID `7MP9JX7CM4`. Placeholders still: bundle `com.example.drivelock`, App Group `group.com.example.drivelock` (change before first device build).
+- Team ID `7MP9JX7CM4`. Bundle `com.michaelscardena.drivelock` (+ `.monitor`, `.tests`), App Group `group.com.michaelscardena.drivelock`.
 - Detector is a pure state machine (`DriveDetector`) with injected time; sensors wrapped in `MotionSource`/`LocationSource`; `DetectionService` wires them.
 - Start: automotive AND speed ≥ 10 mph for 30 s (back-dated). End: no movement ≥ 5 min (≥ 10 min if still "automotive"). Trip end time = last movement.
 - Battery: significant-change always on; GPS low when automotive seen; high during drive; off after 3 idle min.

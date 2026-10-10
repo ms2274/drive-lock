@@ -1,6 +1,6 @@
 name: DriveLock
 options:
-  bundleIdPrefix: com.example
+  bundleIdPrefix: com.michaelscardena
   deploymentTarget:
     iOS: "17.0"
 settings:
@@ -18,20 +18,20 @@ targets:
       path: DriveLock/Resources/DriveLock.entitlements
       properties:
         com.apple.developer.family-controls: true
-        com.apple.security.application-groups: [group.com.example.drivelock]
+        com.apple.security.application-groups: [group.com.michaelscardena.drivelock]
     info:
       path: DriveLock/Resources/Info.plist
       properties:
         CFBundleDisplayName: DriveLock
         UILaunchScreen: {}
         UIBackgroundModes: [location, processing]
-        BGTaskSchedulerPermittedIdentifiers: [com.example.drivelock.refresh]
+        BGTaskSchedulerPermittedIdentifiers: [com.michaelscardena.drivelock.refresh]
         NSMotionUsageDescription: DriveLock uses motion data to tell when you are in a vehicle, so it can shield distracting apps while you drive.
         NSLocationWhenInUseUsageDescription: DriveLock uses your location to measure driving speed and trip distance.
         NSLocationAlwaysAndWhenInUseUsageDescription: DriveLock needs background location to notice when a drive starts, even when the app is closed. Location stays on your device.
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.example.drivelock
+        PRODUCT_BUNDLE_IDENTIFIER: com.michaelscardena.drivelock
     scheme:
       testTargets: [DriveLockTests]
   DriveLockTests:
@@ -42,7 +42,7 @@ targets:
       - target: DriveLock
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.example.drivelock.tests
+        PRODUCT_BUNDLE_IDENTIFIER: com.michaelscardena.drivelock.tests
         GENERATE_INFOPLIST_FILE: YES
   DriveLockMonitor:
     type: app-extension
@@ -59,7 +59,7 @@ targets:
       path: DriveLockMonitor/DriveLockMonitor.entitlements
       properties:
         com.apple.developer.family-controls: true
-        com.apple.security.application-groups: [group.com.example.drivelock]
+        com.apple.security.application-groups: [group.com.michaelscardena.drivelock]
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.example.drivelock.monitor
+        PRODUCT_BUNDLE_IDENTIFIER: com.michaelscardena.drivelock.monitor
