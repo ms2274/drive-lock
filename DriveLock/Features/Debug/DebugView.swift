@@ -21,6 +21,8 @@ struct DebugView: View {
                 row("Mode", shielding.strictMode ? "strict" : "block-list")
                 row("Screen Time", shielding.isAuthorized ? "granted" : "not granted")
                 if !shielding.status.isEmpty { row("Last", shielding.status) }
+                row("Chosen", "apps \(shielding.blocked.applicationTokens.count), categories \(shielding.blocked.categoryTokens.count), sites \(shielding.blocked.webDomainTokens.count)")
+                row("In system", shielding.appliedSummary)
                 NavigationLink("Shield settings") { ShieldSetupView() }
                 Button("Shield now") { shielding.shieldNow() }
                 Button("Unshield") { shielding.unshield() }

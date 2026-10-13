@@ -9,12 +9,18 @@ protocol ShieldStore: AnyObject {
     var isAuthorized: Bool { get }
     /// True if shields are currently written (they survive app relaunch).
     var isActive: Bool { get }
+    /// What the system store currently holds, for the debug screen.
+    var appliedSummary: String { get }
     func requestAuthorization() async throws
     func apply(_ plan: ShieldPlan)
     func clear()
     /// (Re)start the safety window; the monitor extension clears shields when it ends.
     func armSafetyClear(after seconds: TimeInterval) throws
     func cancelSafetyClear()
+}
+
+extension ShieldStore {
+    var appliedSummary: String { "n/a" }
 }
 
 @MainActor
@@ -24,6 +30,13 @@ final class ManagedShieldStore: ShieldStore {
 
     var isAuthorized: Bool { AuthorizationCenter.shared.authorizationStatus == .approved }
     var isActive: Bool { store.shield.applicationCategories != nil || store.shield.applications != nil }
+
+    var appliedSummary: String {
+        let apps = store.shield.applications?.count ?? 0
+        let cats = store.shield.applicationCategories == nil ? "no" : "yes"
+        let webs = store.shield.webDomains?.count ?? 0
+        return "apps \(apps), categories \(cats), sites \(webs)"
+    }
 
     func requestAuthorization() async throws {
         try await AuthorizationCenter.shared.requestAuthorization(for: .individual)

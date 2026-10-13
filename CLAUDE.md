@@ -10,13 +10,15 @@
 - Battery: significant-change always on; GPS low when automotive seen; high during drive; off after 3 idle min.
 - Shielding: block-list default (prefilled Messages/Social/Browsers); **Strict mode** toggle = allow-list (all except Maps/music/user-picked). Chosen: option C.
 - Shielding (b): iOS gives only opaque picker tokens, so block-list can't be prefilled; setup screen suggests Messages/Social/Browsers, and Strict mode asks the user to pick Maps + music. `ShieldingService` reacts to drive start/end; `DriveLockMonitor` extension clears shields if a 1 h safety window (renewed every 15 min while shielded) runs out. "I'm a passenger" lifts shields for the current drive only; streak penalty comes in (c).
+- Device finding (2026-10-11): shielding works on a real iPhone, but Messages is NOT shielded while it is in Settings > Screen Time > Always Allowed (Apple's default). Removing it from that list makes the shield work. Safari and other apps shield fine either way. Debug screen has "Chosen" / "In system" rows to read back what iOS holds.
 - Process: commit after each milestone; ask before adding deps/features outside spec.
 
 ## Constraints
 - Builds on Mac (Xcode 27, iOS 27 simulator; deployment target iOS 17). Regenerate with `xcodegen`, then `xcodebuild test -scheme DriveLock -destination 'platform=iOS Simulator,name=iPhone 17'`.
 
 ## Open questions / to verify on device
-- Do Siri/CarPlay still read and send texts while Messages is shielded?
+- Do Siri/CarPlay still read and send texts while Messages is shielded? (Messages must first be removed from Always Allowed to shield it at all.)
+- Should the setup screen tell users to remove Messages from Always Allowed? (not built; needs your OK)
 - Bus/train false positives?
 - Detection delay after force-quit; behavior in Low Power Mode.
 - Does the safety monitor reliably fire after the app is killed mid-drive?

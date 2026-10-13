@@ -16,6 +16,9 @@ final class ShieldingService {
     var allowed: FamilyActivitySelection { didSet { save(); reapplyIfShielded() } }
     var hasCompletedSetup: Bool { didSet { save() } }
 
+    /// What the system store holds right now, for the debug screen.
+    var appliedSummary: String { store.appliedSummary }
+
     var plan: ShieldPlan { .make(strict: strictMode, blocked: blocked, allowed: allowed) }
 
     /// Safety window length; the app renews it while shielded, so it only fires if the app dies.
