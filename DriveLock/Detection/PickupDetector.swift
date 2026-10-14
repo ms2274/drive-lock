@@ -6,7 +6,7 @@ struct PickupConfig: Equatable {
     var tiltDegrees = 35.0
     var windowSeconds = 2.0
     /// Handling within this long of the last tilt is the same pickup (picking up, then putting down).
-    var quietSeconds = 20.0
+    var quietSeconds = 10.0
 
     static let `default` = PickupConfig()
 }

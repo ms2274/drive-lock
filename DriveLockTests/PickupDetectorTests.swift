@@ -52,6 +52,13 @@ final class PickupDetectorTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(run(s), 2)
     }
 
+    func testRepeatPickupAfterQuietWindowCountsAgain() {
+        // Lift, put down, wait 12 s, lift again: two pickups with a 10 s window.
+        let s = hold(0, from: 0, for: 10) + hold(50, from: 10, for: 1) + hold(0, from: 11, for: 12)
+            + hold(50, from: 23, for: 1)
+        XCTAssertEqual(run(s), 2)
+    }
+
     func testZeroVectorDoesNotCrashOrCount() {
         let zero = (0..<20).map { GravitySample(time: Double($0) * 0.1, x: 0, y: 0, z: 0) }
         XCTAssertEqual(run(zero), 0)
