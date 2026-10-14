@@ -11,6 +11,7 @@
 - Shielding: block-list default (prefilled Messages/Social/Browsers); **Strict mode** toggle = allow-list (all except Maps/music/user-picked). Chosen: option C.
 - Shielding (b): iOS gives only opaque picker tokens, so block-list can't be prefilled; setup screen suggests Messages/Social/Browsers, and Strict mode asks the user to pick Maps + music. `ShieldingService` reacts to drive start/end; `DriveLockMonitor` extension clears shields if a 1 h safety window (renewed every 15 min while shielded) runs out. "I'm a passenger" lifts shields for the current drive only; streak penalty comes in (c).
 - Device finding (2026-10-11): shielding works on a real iPhone, but Messages is NOT shielded while it is in Settings > Screen Time > Always Allowed (Apple's default). Removing it from that list makes the shield work. Safari and other apps shield fine either way. Debug screen has "Chosen" / "In system" rows to read back what iOS holds.
+- Scoring (c, WIP 2026-10-14): 100 start, -10/pickup, clean >= 80, drives < 0.5 mi unscored, passenger override unscored + resets streak (`ScoringRules`). Pickup option A (count shield-screen displays from a ShieldConfiguration extension) FAILED on device: the extension runs and draws its screen but cannot write anything to the App Group (UserDefaults, atomic file, direct file all tried, no error note either). Need another pickup signal; `TripRecorder.pickupCount` is the plug point.
 - Process: commit after each milestone; ask before adding deps/features outside spec.
 
 ## Constraints

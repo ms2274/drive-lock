@@ -1,9 +1,13 @@
+import SwiftData
 import SwiftUI
 
 /// Milestone (a) screen: live detector state plus a replay harness.
 struct DebugView: View {
     @Environment(DetectionService.self) private var detection
     @Environment(ShieldingService.self) private var shielding
+    @Query(sort: \Trip.end, order: .reverse) private var trips: [Trip]
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var blockScreens = 0
     @State private var replayResults: [ReplayResult] = []
 
     var body: some View {
@@ -29,6 +33,15 @@ struct DebugView: View {
                 Button("I'm a passenger") { shielding.imAPassenger() }
                     .disabled(!shielding.isShielded)
             }
+            Section("Trips") {
+                row("Clean streak", "\(Streak.current(newestFirst: trips.map(\.outcome)))")
+                row("Recorded", "\(trips.count)")
+                row("Block screens shown", "\(blockScreens)")
+                if let t = trips.first {
+                    row("Last trip", String(format: "%.1f mi, %d pickups", t.miles, t.pickups))
+                    row("Last result", t.score.map { "\($0) (\(t.outcome.rawValue))" } ?? t.outcome.rawValue)
+                }
+            }
             Section("Replay scenarios (offline, no sensors)") {
                 Button("Run all") { replayResults = Scenario.all.map(ReplayResult.run) }
                 ForEach(replayResults) { r in
@@ -50,6 +63,12 @@ struct DebugView: View {
             }
         }
         .navigationTitle("Detection Debug")
+        .onAppear(perform: reloadBlockScreens)
+        .onChange(of: scenePhase) { _, phase in if phase == .active { reloadBlockScreens() } }
+    }
+
+    private func reloadBlockScreens() {
+        blockScreens = ShieldAttemptLog.count(from: .distantPast, to: .distantFuture)
     }
 
     private func row(_ k: String, _ v: String) -> some View {
