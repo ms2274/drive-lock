@@ -13,6 +13,7 @@
 - Device finding (2026-10-11): shielding works on a real iPhone, but Messages is NOT shielded while it is in Settings > Screen Time > Always Allowed (Apple's default). Removing it from that list makes the shield work. Safari and other apps shield fine either way. Debug screen has "Chosen" / "In system" rows to read back what iOS holds.
 - Scoring (c): 100 start, -10/pickup, clean >= 80, drives < 0.5 mi unscored, passenger override unscored + resets streak (`ScoringRules`, all in `Scoring.swift`).
 - Pickups (c): option A (count shield-screen displays from a ShieldConfiguration extension) FAILED on device: the extension draws its screen but cannot write anything to the App Group (UserDefaults, atomic file, direct file all tried). Removed. Chosen: option B, a motion heuristic. `PickupDetector` watches gravity direction in the phone frame: >= 35 deg swing within 2 s = pickup; handling within 10 s of the last tilt is the same pickup. Only counted between drive start and the back-dated drive end. Debug screen has a "pickup test" switch to try it without a drive. Thresholds are guesses until tuned on real drives.
+- UI (d): extremely simple, one screen; no tabs. Gear opens Settings sheet. Onboarding: welcome, Screen Time + pick apps, remove Messages from Always Allowed, Location Always, done. Home shows an orange banner listing anything missing.
 - Process: commit after each milestone; ask before adding deps/features outside spec.
 
 ## Constraints
@@ -20,7 +21,6 @@
 
 ## Open questions / to verify on device
 - Do Siri/CarPlay still read and send texts while Messages is shielded? (Messages must first be removed from Always Allowed to shield it at all.)
-- Should the setup screen tell users to remove Messages from Always Allowed? (not built; needs your OK)
 - Bus/train false positives?
 - Detection delay after force-quit; behavior in Low Power Mode.
 - Does the safety monitor reliably fire after the app is killed mid-drive?
@@ -30,5 +30,5 @@
 - [x] (a) Detection + debug screen
 - [x] (b) App shielding (simulator build + unit tests only; device test pending)
 - [~] (c) Trip scoring (built + tested in simulator; real-drive tuning pending)
-- [ ] (d) UI
+- [x] (d) UI: single screen (streak, status, last 5 drives, passenger button) + settings sheet + 5-step onboarding incl. 'remove Messages from Always Allowed'. Debug screen lives under Settings > Developer.
 - [ ] (e) Leaderboard

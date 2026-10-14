@@ -1,5 +1,6 @@
 import Foundation
 import CoreLocation
+import CoreMotion
 import Observation
 
 struct DebugLogEntry: Identifiable {
@@ -17,6 +18,8 @@ final class DetectionService {
     private(set) var miles: Double = 0
     private(set) var trackingMode: TrackingMode = .off
     private(set) var log: [DebugLogEntry] = []
+    private(set) var locationAuthorization: CLAuthorizationStatus = .notDetermined
+    private(set) var motionAuthorization: CMAuthorizationStatus = .notDetermined
     /// Pickups seen during the current (or last) drive, live for the debug screen.
     private(set) var pickupCount = 0
     private var pickupTimes: [Date] = []
@@ -40,6 +43,7 @@ final class DetectionService {
         motion.onAutomotive = { [weak self] auto, _ in Task { @MainActor in self?.handleAutomotive(auto) } }
         location.onLocations = { [weak self] locs in Task { @MainActor in self?.handleLocations(locs) } }
         location.onSignificantWake = { [weak self] in Task { @MainActor in self?.handleWake() } }
+        location.onAuthChange = { [weak self] in Task { @MainActor in self?.refreshPermissions() } }
         gravity.onSample = { [weak self] sample, date in
             Task { @MainActor in self?.handleGravity(sample, at: date) }
         }
@@ -47,7 +51,14 @@ final class DetectionService {
 
     func requestPermissions() { location.requestAlways() }
 
+    /// Re-read permission state; the Home screen shows what is missing.
+    func refreshPermissions() {
+        locationAuthorization = location.authorization
+        motionAuthorization = MotionSource.authorization
+    }
+
     func start() {
+        refreshPermissions()
         location.startMonitoring()
         motion.start()
         timer?.invalidate()

@@ -15,12 +15,13 @@ struct DriveLockApp: App {
 
     var body: some Scene {
         WindowGroup {
-            NavigationStack { DebugView() }
+            HomeView()
                 .environment(detection)
                 .environment(shielding)
                 .modelContainer(container)
                 .sheet(isPresented: Binding(get: { !shielding.hasCompletedSetup }, set: { _ in })) {
-                    NavigationStack { ShieldSetupView(isOnboarding: true) }
+                    OnboardingView()
+                        .environment(detection)
                         .environment(shielding)
                         .interactiveDismissDisabled()
                 }
@@ -36,7 +37,7 @@ struct DriveLockApp: App {
                     detection.start()
                 }
                 .onChange(of: scenePhase) { _, phase in
-                    if phase == .active { shielding.refresh() }
+                    if phase == .active { shielding.refresh(); detection.refreshPermissions() }
                 }
         }
     }
