@@ -17,6 +17,9 @@ final class DetectionService {
     private(set) var miles: Double = 0
     private(set) var trackingMode: TrackingMode = .off
     private(set) var log: [DebugLogEntry] = []
+    /// Pickups seen during the current (or last) drive, live for the debug screen.
+    private(set) var pickupCount = 0
+    private var pickupTimes: [Date] = []
 
     /// Fired for consumers (shielding in milestone b, trip recording in c).
     var onDriveStarted: ((Date) -> Void)?
@@ -25,6 +28,8 @@ final class DetectionService {
     private var detector: DriveDetector
     private let motion = MotionSource()
     private let location = LocationSource()
+    private let gravity = GravitySource()
+    private var pickupDetector = PickupDetector()
     private var lastFix: CLLocation?
     private var lastActivity = Date.distantPast
     private var timer: Timer?
@@ -35,6 +40,9 @@ final class DetectionService {
         motion.onAutomotive = { [weak self] auto, _ in Task { @MainActor in self?.handleAutomotive(auto) } }
         location.onLocations = { [weak self] locs in Task { @MainActor in self?.handleLocations(locs) } }
         location.onSignificantWake = { [weak self] in Task { @MainActor in self?.handleWake() } }
+        gravity.onSample = { [weak self] sample, date in
+            Task { @MainActor in self?.handleGravity(sample, at: date) }
+        }
     }
 
     func requestPermissions() { location.requestAlways() }
@@ -51,7 +59,7 @@ final class DetectionService {
     }
 
     func stop() {
-        timer?.invalidate(); motion.stop(); setMode(.off)
+        timer?.invalidate(); motion.stop(); gravity.stop(); setMode(.off)
         addLog("stopped")
     }
 
@@ -86,6 +94,32 @@ final class DetectionService {
         }
     }
 
+    private func handleGravity(_ sample: GravitySample, at date: Date) {
+        guard pickupDetector.ingest(sample) else { return }
+        pickupTimes.append(date)
+        pickupCount = pickupDetector.count
+        addLog("pickup #\(pickupCount)")
+    }
+
+    /// Debug: count pickups without a drive, so the sensor can be tried at a desk.
+    private(set) var isPickupTesting = false
+
+    func startPickupTest() {
+        pickupDetector.reset(); pickupTimes = []; pickupCount = 0
+        gravity.start()
+        isPickupTesting = true
+    }
+
+    func stopPickupTest() {
+        if state == .idle { gravity.stop() }
+        isPickupTesting = false
+    }
+
+    /// Pickups inside a drive. Handling after the (back-dated) drive end, while parked, is not counted.
+    func pickups(from start: Date, to end: Date) -> Int {
+        pickupTimes.filter { $0 >= start && $0 <= end }.count
+    }
+
     private func tick() {
         feed(DetectorSample(time: now()))
         // Battery: stop GPS after a quiet spell with no automotive signal.
@@ -111,8 +145,13 @@ final class DetectionService {
             addLog("state → \(s)")
         case .driveStarted(let t):
             addLog("DRIVE STARTED")
+            pickupDetector.reset()
+            pickupTimes = []
+            pickupCount = 0
+            gravity.start()
             onDriveStarted?(Date(timeIntervalSinceReferenceDate: t))
         case .driveEnded(let s, let e, let m):
+            gravity.stop()
             addLog(String(format: "DRIVE ENDED %.2f mi", m / 1609.344))
             onDriveEnded?(Date(timeIntervalSinceReferenceDate: s), Date(timeIntervalSinceReferenceDate: e), m)
         }

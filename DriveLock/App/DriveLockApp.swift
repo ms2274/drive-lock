@@ -30,7 +30,8 @@ struct DriveLockApp: App {
                         let passenger = shielding.passengerOverride
                         shielding.driveEnded()
                         TripRecorder(context: container.mainContext)
-                            .record(start: start, end: end, meters: meters, passenger: passenger)
+                            .record(start: start, end: end, meters: meters,
+                                    pickups: detection.pickups(from: start, to: end), passenger: passenger)
                     }
                     detection.start()
                 }

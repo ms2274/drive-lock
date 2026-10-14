@@ -6,8 +6,6 @@ struct DebugView: View {
     @Environment(DetectionService.self) private var detection
     @Environment(ShieldingService.self) private var shielding
     @Query(sort: \Trip.end, order: .reverse) private var trips: [Trip]
-    @Environment(\.scenePhase) private var scenePhase
-    @State private var blockScreens = 0
     @State private var replayResults: [ReplayResult] = []
 
     var body: some View {
@@ -18,6 +16,10 @@ struct DebugView: View {
                 row("Speed", String(format: "%.0f mph", detection.speedMph))
                 row("Trip distance", String(format: "%.2f mi", detection.miles))
                 row("GPS mode", detection.trackingMode.rawValue)
+                row("Pickups this drive", "\(detection.pickupCount)")
+                Button(detection.isPickupTesting ? "Stop pickup test" : "Start pickup test") {
+                    detection.isPickupTesting ? detection.stopPickupTest() : detection.startPickupTest()
+                }
                 Button("Request permissions") { detection.requestPermissions() }
             }
             Section("Shielding") {
@@ -36,7 +38,6 @@ struct DebugView: View {
             Section("Trips") {
                 row("Clean streak", "\(Streak.current(newestFirst: trips.map(\.outcome)))")
                 row("Recorded", "\(trips.count)")
-                row("Block screens shown", "\(blockScreens)")
                 if let t = trips.first {
                     row("Last trip", String(format: "%.1f mi, %d pickups", t.miles, t.pickups))
                     row("Last result", t.score.map { "\($0) (\(t.outcome.rawValue))" } ?? t.outcome.rawValue)
@@ -63,12 +64,6 @@ struct DebugView: View {
             }
         }
         .navigationTitle("Detection Debug")
-        .onAppear(perform: reloadBlockScreens)
-        .onChange(of: scenePhase) { _, phase in if phase == .active { reloadBlockScreens() } }
-    }
-
-    private func reloadBlockScreens() {
-        blockScreens = ShieldAttemptLog.count(from: .distantPast, to: .distantFuture)
     }
 
     private func row(_ k: String, _ v: String) -> some View {

@@ -14,7 +14,6 @@ targets:
     sources: [DriveLock, Shared]
     dependencies:
       - target: DriveLockMonitor
-      - target: DriveLockShield
     entitlements:
       path: DriveLock/Resources/DriveLock.entitlements
       properties:
@@ -64,22 +63,3 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.michaelscardena.drivelock.monitor
-  DriveLockShield:
-    type: app-extension
-    platform: iOS
-    sources: [DriveLockShield, Shared]
-    info:
-      path: DriveLockShield/Info.plist
-      properties:
-        CFBundleDisplayName: DriveLockShield
-        NSExtension:
-          NSExtensionPointIdentifier: com.apple.ManagedSettingsUI.shield-configuration-service
-          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).DriveShieldConfiguration
-    entitlements:
-      path: DriveLockShield/DriveLockShield.entitlements
-      properties:
-        com.apple.developer.family-controls: true
-        com.apple.security.application-groups: [group.com.michaelscardena.drivelock]
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.michaelscardena.drivelock.shield
