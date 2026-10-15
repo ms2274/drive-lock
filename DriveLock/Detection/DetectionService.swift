@@ -96,7 +96,10 @@ final class DetectionService {
     private func handleLocations(_ locs: [CLLocation]) {
         for loc in locs {
             guard loc.horizontalAccuracy >= 0, loc.horizontalAccuracy <= detector.config.maxHorizontalAccuracy else { continue }
-            let delta = lastFix.map { loc.distance(from: $0) } ?? 0
+            let delta = lastFix.map {
+                Self.fixDelta(meters: loc.distance(from: $0),
+                              seconds: loc.timestamp.timeIntervalSince($0.timestamp))
+            } ?? 0
             lastFix = loc
             let speed = loc.speed >= 0 ? loc.speed : nil
             if let s = speed { speedMph = s * 2.23694 }
@@ -129,6 +132,14 @@ final class DetectionService {
     /// Pickups inside a drive. Handling after the (back-dated) drive end, while parked, is not counted.
     func pickups(from start: Date, to end: Date) -> Int {
         pickupTimes.filter { $0 >= start && $0 <= end }.count
+    }
+
+    /// Distance to count between two fixes. A stale previous fix (app was suspended) or an impossible
+    /// speed means the app woke up somewhere new, not that it drove that far, so count nothing.
+    nonisolated static func fixDelta(meters: Double, seconds: TimeInterval,
+                                     maxGap: TimeInterval = 60, maxSpeed: Double = 70) -> Double {
+        guard seconds > 0, seconds <= maxGap, meters / seconds <= maxSpeed else { return 0 }
+        return meters
     }
 
     private func tick() {
