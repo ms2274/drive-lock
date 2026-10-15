@@ -8,8 +8,9 @@ struct OnboardingView: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
     @State private var step = 0
+    @State private var notificationsAllowed = false
 
-    private let lastStep = 4
+    private let lastStep = 6
 
     var body: some View {
         NavigationStack {
@@ -38,6 +39,7 @@ struct OnboardingView: View {
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active { detection.refreshPermissions(); shielding.refresh() }
             }
+            .task { notificationsAllowed = await DriveNotifier.isAllowed() }
         }
     }
 
@@ -46,6 +48,7 @@ struct OnboardingView: View {
         switch step {
         case 1: return shielding.isAuthorized && shielding.plan != .none
         case 3: return detection.locationAuthorization == .authorizedAlways
+        case 5: return notificationsAllowed
         default: return true
         }
     }
@@ -93,6 +96,32 @@ struct OnboardingView: View {
                     Text("Currently \"While Using\". Tap again and choose Always, or change it in iOS Settings.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
+            }
+        case 4:
+            header("car.fill", "Turn on Driving Focus")
+            Text("Apple's Driving Focus silences notifications and can text back \"I'm driving\" for you. DriveLock can't switch it on, but iOS can do it automatically:")
+            VStack(alignment: .leading, spacing: 8) {
+                Text("1. Open the iOS **Settings** app")
+                Text("2. Tap **Focus**, then **Driving** (tap **+** to add it if it's missing)")
+                Text("3. Under **Turn On Automatically**, choose **While Driving**")
+                Text("4. Optional: tap **Auto-Reply** to choose who gets the \"I'm driving\" text")
+            }
+            Button("Open iOS Settings") {
+                if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+            }
+            .buttonStyle(.bordered)
+            Text("Driving Focus and DriveLock work together: Focus quiets alerts, DriveLock blocks the apps.")
+                .font(.footnote).foregroundStyle(.secondary)
+        case 5:
+            header("bell.badge.fill", "Get your drive score")
+            Text("When a drive ends, DriveLock can tell you your score and streak, like \"Clean drive: 100. Streak: 6.\"")
+            if notificationsAllowed {
+                Label("Notifications allowed", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+            } else {
+                Button("Allow Notifications") {
+                    Task { notificationsAllowed = await DriveNotifier.requestPermission() }
+                }
+                .buttonStyle(.borderedProminent)
             }
         default:
             header("checkmark.seal.fill", "You're set")
