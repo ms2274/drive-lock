@@ -7,8 +7,10 @@ import SwiftUI
 struct HomeView: View {
     @Environment(DetectionService.self) private var detection
     @Environment(ShieldingService.self) private var shielding
+    @Environment(\.openURL) private var openURL
     @Query(sort: \Trip.end, order: .reverse) private var trips: [Trip]
     @State private var showSettings = false
+    @State private var showShieldSetup = false
 
     private var streak: Int { Streak.current(newestFirst: trips.map(\.outcome)) }
     private var isDriving: Bool { if case .driving = detection.state { return true } else { return false } }
@@ -16,16 +18,16 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 28) {
+                VStack(spacing: 20) {
                     if !issues.isEmpty { issuesBanner }
-                    streakBlock
-                    statusBlock
-                    if isDriving && shielding.isShielded { passengerBlock }
+                    streakCard
+                    statusCard
                     recentDrives
                 }
                 .padding(.horizontal, 16)
-                .padding(.vertical, 20)
+                .padding(.vertical, 12)
             }
+            .background(Color(.systemGroupedBackground))
             .navigationTitle("DriveLock")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -33,126 +35,230 @@ struct HomeView: View {
                         .accessibilityLabel("Settings")
                 }
             }
+            .navigationDestination(isPresented: $showShieldSetup) { ShieldSetupView() }
             .sheet(isPresented: $showSettings) { SettingsView() }
         }
     }
 
-    // MARK: Sections
-    private var streakBlock: some View {
-        VStack(spacing: 4) {
+    // MARK: Streak
+    private var streakCard: some View {
+        let on = streak > 0
+        return VStack(spacing: 6) {
+            Label("Current streak", systemImage: "shield.lefthalf.filled")
+                .font(.subheadline.weight(.semibold))
+                .textCase(.uppercase)
+                .foregroundStyle(on ? .white.opacity(0.85) : .secondary)
             Text("\(streak)")
-                .font(.system(size: 88, weight: .bold, design: .rounded))
-                .foregroundStyle(streak > 0 ? Color.green : Color.secondary)
+                .font(.system(size: 80, weight: .bold, design: .rounded))
+                .foregroundStyle(on ? .white : .secondary)
                 .contentTransition(.numericText())
-            Text(streak == 1 ? "clean drive in a row" : "clean drives in a row")
+            Text(on ? (streak == 1 ? "clean drive in a row" : "clean drives in a row")
+                    : "Your next clean drive starts a streak")
                 .font(.headline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(on ? .white.opacity(0.9) : .secondary)
         }
         .frame(maxWidth: .infinity)
-        .accessibilityElement(children: .combine)
+        .padding(.vertical, 24)
+        .background {
+            RoundedRectangle(cornerRadius: 20)
+                .fill(on ? AnyShapeStyle(LinearGradient(colors: [.accentColor, .accentColor.opacity(0.7)],
+                                                         startPoint: .topLeading, endPoint: .bottomTrailing))
+                         : AnyShapeStyle(Color(.secondarySystemGroupedBackground)))
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(on ? "Current streak: \(streak) clean \(streak == 1 ? "drive" : "drives") in a row"
+                               : "No streak yet")
     }
 
-    private var statusBlock: some View {
+    // MARK: Status
+    private struct Status {
+        let icon: String, title: String, detail: String, color: Color
+    }
+
+    private var status: Status {
+        if isDriving {
+            if shielding.isShielded {
+                return Status(icon: "lock.fill", title: "Shielded",
+                              detail: "You're driving. Distracting apps are blocked.", color: .green)
+            }
+            if shielding.passengerOverride {
+                return Status(icon: "person.fill", title: "Passenger mode",
+                              detail: "Shields are off for this drive.", color: .orange)
+            }
+            return Status(icon: "exclamationmark.triangle.fill", title: "Nothing is shielded",
+                          detail: "You're driving, but no apps are set to be blocked.", color: .orange)
+        }
+        return Status(icon: "car.fill", title: "Ready",
+                      detail: "Apps will be shielded when you start driving.", color: .secondary)
+    }
+
+    private var statusCard: some View {
         let s = status
-        return HStack(spacing: 12) {
-            Image(systemName: s.icon).font(.title3).foregroundStyle(s.color)
-            Text(s.text).font(.headline)
-            Spacer()
+        let active = s.color != .secondary
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 14) {
+                Image(systemName: s.icon)
+                    .font(.title2)
+                    .foregroundStyle(active ? .white : .secondary)
+                    .frame(width: 48, height: 48)
+                    .background(active ? s.color : Color(.tertiarySystemFill), in: Circle())
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(s.title).font(.title3.weight(.semibold))
+                    Text(s.detail).font(.subheadline).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+            }
+            .accessibilityElement(children: .combine)
+
+            if isDriving && shielding.isShielded {
+                Button { shielding.imAPassenger() } label: {
+                    Text("I'm a passenger").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                Text("Turns shields off for this drive and ends your streak.")
+                    .font(.footnote).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+                    .multilineTextAlignment(.center)
+            }
         }
         .padding(16)
-        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 14))
+        .background(active ? s.color.opacity(0.12) : Color(.secondarySystemGroupedBackground),
+                    in: RoundedRectangle(cornerRadius: 20))
     }
 
-    private var passengerBlock: some View {
-        VStack(spacing: 8) {
-            Button { shielding.imAPassenger() } label: {
-                Text("I'm a passenger").frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
-            Text("Turns shields off for this drive and ends your streak.")
-                .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
-        }
-    }
-
+    // MARK: Drives
     private var recentDrives: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Recent drives").font(.headline)
+            Text("Recent drives").font(.title3.weight(.semibold)).padding(.leading, 4)
             if trips.isEmpty {
-                Text("No drives yet. Drive as you normally would; DriveLock notices on its own.")
-                    .font(.subheadline).foregroundStyle(.secondary)
+                VStack(spacing: 10) {
+                    Image(systemName: "road.lanes").font(.largeTitle).foregroundStyle(.tertiary)
+                    Text("No drives yet. Drive as you normally would; DriveLock notices on its own.")
+                        .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(24)
+                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
             } else {
                 VStack(spacing: 0) {
                     ForEach(Array(trips.prefix(5).enumerated()), id: \.element.persistentModelID) { i, t in
-                        if i > 0 { Divider() }
+                        if i > 0 { Divider().padding(.leading, 16) }
                         tripRow(t)
                     }
                 }
-                .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 14))
+                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func tripRow(_ t: Trip) -> some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(t.end.formatted(date: .abbreviated, time: .shortened)).font(.subheadline)
-                Text(detail(t)).font(.caption).foregroundStyle(.secondary)
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(Self.when(t.end)).font(.body.weight(.medium))
+                Text(detail(t)).font(.subheadline).foregroundStyle(.secondary)
             }
             Spacer()
-            Text(t.outcome.badge).font(.subheadline.weight(.semibold)).foregroundStyle(t.outcome.color)
+            scorePill(t)
         }
-        .padding(14)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
         .accessibilityElement(children: .combine)
     }
 
+    private func scorePill(_ t: Trip) -> some View {
+        let scored = t.outcome == .clean || t.outcome == .notClean
+        let label = scored ? "\(t.score ?? 0)" : t.outcome.badge
+        return Text(label)
+            .font(scored ? .headline.monospacedDigit() : .caption.weight(.semibold))
+            .foregroundStyle(scored ? .white : .secondary)
+            .frame(minWidth: 44)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(scored ? t.outcome.color : Color(.tertiarySystemFill), in: Capsule())
+            .accessibilityLabel(scored ? "Score \(label), \(t.outcome.badge)" : t.outcome.badge)
+    }
+
     private func detail(_ t: Trip) -> String {
-        let miles = String(format: "%.1f mi", t.miles)
+        let minutes = Int((t.end.timeIntervalSince(t.start) / 60).rounded())
+        var parts = [minutes < 1 ? "<1 min" : "\(minutes) min", String(format: "%.1f mi", t.miles)]
         switch t.outcome {
-        case .passenger, .unscored: return miles
-        default: return "\(miles) · " + (t.pickups == 0 ? "no pickups" : t.pickups == 1 ? "1 pickup" : "\(t.pickups) pickups")
+        case .passenger, .unscored: break
+        default: parts.append(t.pickups == 0 ? "no pickups" : t.pickups == 1 ? "1 pickup" : "\(t.pickups) pickups")
         }
+        return parts.joined(separator: " · ")
     }
 
-    // MARK: Status and issues
-    private var status: (icon: String, text: String, color: Color) {
-        if isDriving {
-            if shielding.isShielded { return ("lock.fill", "Driving: apps are shielded", .green) }
-            if shielding.passengerOverride { return ("person.fill", "Passenger: shields are off", .orange) }
-            return ("exclamationmark.triangle.fill", "Driving: nothing is being shielded", .orange)
-        }
-        return ("car.fill", "Not driving", .secondary)
+    /// "Today, 8:42 AM", "Yesterday, 6:10 PM", or "Oct 12, 7:05 AM".
+    static func when(_ date: Date, calendar: Calendar = .current) -> String {
+        let time = date.formatted(date: .omitted, time: .shortened)
+        if calendar.isDateInToday(date) { return "Today, \(time)" }
+        if calendar.isDateInYesterday(date) { return "Yesterday, \(time)" }
+        return "\(date.formatted(.dateTime.month(.abbreviated).day())), \(time)"
     }
 
-    private var issues: [String] {
-        var out: [String] = []
-        if !shielding.isAuthorized { out.append("Screen Time access is off, so apps can't be shielded.") }
-        else if shielding.plan == .none { out.append("No apps are chosen to block yet.") }
+    // MARK: Issues
+    private enum Fix { case allowScreenTime, chooseApps, askLocation, openSettings }
+
+    private struct Issue: Hashable {
+        let text: String
+        let button: String
+        let fix: Fix
+    }
+
+    private var issues: [Issue] {
+        var out: [Issue] = []
+        if !shielding.isAuthorized {
+            out.append(Issue(text: "Screen Time access is off, so apps can't be shielded.",
+                             button: "Allow", fix: .allowScreenTime))
+        } else if shielding.plan == .none {
+            out.append(Issue(text: "No apps are chosen to block yet.", button: "Choose", fix: .chooseApps))
+        }
         switch detection.locationAuthorization {
         case .authorizedAlways: break
-        case .notDetermined: out.append("Location isn't set up, so drives can't be detected.")
-        default: out.append("Set Location to Always so drives are noticed when the app is closed.")
+        case .notDetermined:
+            out.append(Issue(text: "Location isn't set up, so drives can't be detected.",
+                             button: "Allow", fix: .askLocation))
+        default:
+            out.append(Issue(text: "Set Location to Always so drives are noticed when the app is closed.",
+                             button: "Open", fix: .openSettings))
         }
         if detection.motionAuthorization == .denied || detection.motionAuthorization == .restricted {
-            out.append("Motion & Fitness is off, so driving can't be confirmed.")
+            out.append(Issue(text: "Motion & Fitness is off, so driving can't be confirmed.",
+                             button: "Open", fix: .openSettings))
         }
         return out
     }
 
-    private var issuesBanner: some View {
-        Button { showSettings = true } label: {
-            VStack(alignment: .leading, spacing: 6) {
-                Label("Needs attention", systemImage: "exclamationmark.triangle.fill")
-                    .font(.headline).foregroundStyle(.orange)
-                ForEach(issues, id: \.self) { Text($0).font(.subheadline).foregroundStyle(.primary) }
-                Text("Tap to fix").font(.footnote).foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
-            .background(Color.orange.opacity(0.15), in: RoundedRectangle(cornerRadius: 14))
+    private func perform(_ fix: Fix) {
+        switch fix {
+        case .allowScreenTime: Task { await shielding.requestAuthorization() }
+        case .chooseApps: showShieldSetup = true
+        case .askLocation: detection.requestPermissions()
+        case .openSettings:
+            if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
         }
-        .buttonStyle(.plain)
+    }
+
+    private var issuesBanner: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Needs attention", systemImage: "exclamationmark.triangle.fill")
+                .font(.headline).foregroundStyle(.orange)
+            ForEach(issues, id: \.self) { issue in
+                HStack(alignment: .center, spacing: 12) {
+                    Text(issue.text).font(.subheadline)
+                    Spacer(minLength: 0)
+                    Button(issue.button) { perform(issue.fix) }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.orange)
+                        .controlSize(.small)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 20))
     }
 }
 
