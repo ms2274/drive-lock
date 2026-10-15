@@ -38,12 +38,22 @@ final class DetectionService {
     private var timer: Timer?
     private let idleShutdownSeconds: TimeInterval = 180
     private let logFile: EventLogFile
+    private let defaults: UserDefaults
+    private static let activeDriveKey = "detection.activeDrive"
+
+    /// What gets saved while driving: the detector's drive plus pickups so far.
+    struct SavedDrive: Codable, Equatable {
+        var drive: DriveDetector.ActiveDrive
+        var pickupTimes: [Date]
+    }
 
     var logFileURL: URL { logFile.url }
 
-    init(config: DetectionConfig = .default, logFile: EventLogFile = .default) {
+    init(config: DetectionConfig = .default, logFile: EventLogFile = .default,
+         defaults: UserDefaults = .standard) {
         detector = DriveDetector(config: config)
         self.logFile = logFile
+        self.defaults = defaults
         log = logFile.lines(last: 200).reversed().map { DebugLogEntry(text: $0) }
         motion.onAutomotive = { [weak self] auto, _ in Task { @MainActor in self?.handleAutomotive(auto) } }
         location.onLocations = { [weak self] locs in Task { @MainActor in self?.handleLocations(locs) } }
@@ -72,6 +82,7 @@ final class DetectionService {
         timer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }
         }
+        resumeSavedDrive()
         addLog("detection started (location auth \(location.authorization.rawValue), background updates \(location.backgroundUpdatesAllowed), motion auth \(MotionSource.authorization.rawValue))")
         handleWake(reason: "start")
     }
@@ -135,6 +146,7 @@ final class DetectionService {
         pickupTimes.append(date)
         pickupCount = pickupDetector.count
         addLog("pickup #\(pickupCount)")
+        saveActiveDrive()
     }
 
     /// Debug: count pickups without a drive, so the sensor can be tried at a desk.
@@ -166,6 +178,7 @@ final class DetectionService {
 
     private func tick() {
         feed(DetectorSample(time: now()))
+        saveActiveDrive()
         // Heartbeat while GPS is on: gaps in these lines mean iOS suspended the app.
         if trackingMode != .off {
             addLog(String(format: "tick: %@, automotive %@, %.0f mph, GPS %@",
@@ -198,12 +211,39 @@ final class DetectionService {
             pickupTimes = []
             pickupCount = 0
             gravity.start()
+            saveActiveDrive()
             onDriveStarted?(Date(timeIntervalSinceReferenceDate: t))
         case .driveEnded(let s, let e, let m):
             gravity.stop()
+            defaults.removeObject(forKey: Self.activeDriveKey)
             addLog(String(format: "DRIVE ENDED %.2f mi", m / 1609.344))
             onDriveEnded?(Date(timeIntervalSinceReferenceDate: s), Date(timeIntervalSinceReferenceDate: e), m)
         }
+    }
+
+    // MARK: Drive in progress survives relaunch
+    private func saveActiveDrive() {
+        guard let drive = detector.activeDrive else { return }
+        let saved = SavedDrive(drive: drive, pickupTimes: pickupTimes)
+        defaults.set(try? JSONEncoder().encode(saved), forKey: Self.activeDriveKey)
+    }
+
+    /// If iOS killed the app mid-drive, carry on with that drive instead of losing it.
+    private func resumeSavedDrive() {
+        guard detector.activeDrive == nil,
+              let data = defaults.data(forKey: Self.activeDriveKey),
+              let saved = try? JSONDecoder().decode(SavedDrive.self, from: data) else { return }
+        detector.resume(saved.drive)
+        state = detector.state
+        miles = detector.meters / 1609.344
+        pickupTimes = saved.pickupTimes
+        pickupCount = saved.pickupTimes.count
+        lastActivity = Date()
+        gravity.start()
+        applyMode()
+        addLog(String(format: "RESUMED drive started %@, %.2f mi, %d pickups so far",
+                      Date(timeIntervalSinceReferenceDate: saved.drive.since).formatted(date: .omitted, time: .standard),
+                      miles, pickupCount))
     }
 
     private func applyMode() {

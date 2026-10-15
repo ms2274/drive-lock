@@ -103,6 +103,16 @@ final class ShieldingServiceTests: XCTestCase {
         XCTAssertFalse(s.isShielded)
     }
 
+    func testPassengerChoiceSurvivesRelaunchUntilDriveEnds() {
+        let s = makeService()
+        s.driveStarted()
+        s.imAPassenger()
+        let relaunched = ShieldingService(store: store, defaults: defaults)
+        XCTAssertTrue(relaunched.passengerOverride)
+        relaunched.driveEnded()
+        XCTAssertFalse(ShieldingService(store: store, defaults: defaults).passengerOverride)
+    }
+
     func testSettingsPersist() {
         let s = makeService()
         s.hasCompletedSetup = true
