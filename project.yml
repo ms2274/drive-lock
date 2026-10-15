@@ -24,6 +24,7 @@ targets:
       properties:
         CFBundleDisplayName: DriveLock
         UILaunchScreen: {}
+        UIUserInterfaceStyle: Dark
         UIBackgroundModes: [location, processing]
         BGTaskSchedulerPermittedIdentifiers: [com.michaelscardena.drivelock.refresh]
         NSMotionUsageDescription: DriveLock uses motion data to tell when you are in a vehicle, so it can shield distracting apps while you drive.

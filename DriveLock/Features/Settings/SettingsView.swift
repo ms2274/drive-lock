@@ -13,32 +13,34 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section("Apps") {
-                    NavigationLink { ShieldSetupView() } label: { Label("Shield settings", systemImage: "lock.shield") }
+                    NavigationLink { ShieldSetupView() } label: {
+                        row("square.grid.2x2", "Blocked apps", shieldSummary)
+                    }
                 }
 
                 Section {
-                    permissionRow("Screen Time", ok: shielding.isAuthorized,
+                    permissionRow("hourglass", "Screen Time", ok: shielding.isAuthorized,
                                   okText: "Allowed", badText: "Off")
-                    permissionRow("Location", ok: detection.locationAuthorization == .authorizedAlways,
+                    permissionRow("location.fill", "Location", ok: detection.locationAuthorization == .authorizedAlways,
                                   okText: "Always", badText: locationText)
-                    permissionRow("Motion & Fitness",
+                    permissionRow("figure.walk.motion", "Motion & Fitness",
                                   ok: detection.motionAuthorization == .authorized,
                                   okText: "Allowed",
                                   badText: detection.motionAuthorization == .notDetermined ? "Not asked yet" : "Off",
                                   neutral: detection.motionAuthorization == .notDetermined)
-                    Button("Open iOS Settings") {
+                    Button {
                         if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
-                    }
+                    } label: { row("gear", "Open iOS Settings", nil) }
                 } header: { Text("Permissions") }
 
                 Section("Help") {
                     NavigationLink { HowItWorksView() } label: {
-                        Label("How DriveLock works", systemImage: "questionmark.circle")
+                        row("questionmark.circle", "How DriveLock works", nil)
                     }
                 }
 
                 Section("Developer") {
-                    NavigationLink("Debug screen") { DebugView() }
+                    NavigationLink { DebugView() } label: { row("ladybug", "Debug screen", nil) }
                 }
             }
             .navigationTitle("Settings")
@@ -59,16 +61,37 @@ struct SettingsView: View {
         }
     }
 
-    private func permissionRow(_ name: String, ok: Bool, okText: String, badText: String,
+    private var shieldSummary: String {
+        if shielding.strictMode { return "Strict mode: all but allowed apps" }
+        return shielding.plan == .none ? "None chosen" : "Chosen apps and categories"
+    }
+
+    /// Icon, title and an optional line underneath, like a system settings row.
+    private func row(_ icon: String, _ title: String, _ subtitle: String?,
+                     subtitleColor: Color = .secondary) -> some View {
+        HStack(spacing: 14) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundStyle(.primary)
+                .frame(width: 36, height: 36)
+                .background(.white.opacity(0.08), in: Circle())
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).foregroundStyle(.primary)
+                if let subtitle { Text(subtitle).font(.subheadline).foregroundStyle(subtitleColor) }
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func permissionRow(_ icon: String, _ name: String, ok: Bool, okText: String, badText: String,
                                neutral: Bool = false) -> some View {
         HStack {
-            Text(name)
+            row(icon, name, ok ? okText : badText,
+                subtitleColor: ok ? .green : neutral ? .secondary : .orange)
             Spacer()
-            Label(ok ? okText : badText,
-                  systemImage: ok ? "checkmark.circle.fill" : neutral ? "circle" : "exclamationmark.circle.fill")
-                .labelStyle(.titleAndIcon)
+            Image(systemName: ok ? "checkmark.circle.fill" : neutral ? "circle" : "exclamationmark.circle.fill")
                 .foregroundStyle(ok ? Color.green : neutral ? Color.secondary : Color.orange)
-                .font(.subheadline)
+                .accessibilityHidden(true)
         }
     }
 }

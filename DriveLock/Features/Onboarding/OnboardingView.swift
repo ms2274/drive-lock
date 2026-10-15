@@ -13,13 +13,19 @@ struct OnboardingView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 20) { content }
-                        .padding(24)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+            Group {
+                if step == 0 {
+                    welcome
+                } else {
+                    VStack(spacing: 0) {
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 20) { content }
+                                .padding(24)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        footer
+                    }
                 }
-                footer
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -46,11 +52,6 @@ struct OnboardingView: View {
 
     @ViewBuilder private var content: some View {
         switch step {
-        case 0:
-            header("car.fill", "Drive without distractions")
-            Text("DriveLock shields distracting apps while you drive and keeps a streak of clean drives.")
-            Text("It can't lock your phone. It makes opening apps harder by showing a block screen, and it keeps score so you can see how you're doing.")
-                .foregroundStyle(.secondary)
         case 1:
             header("hourglass", "Allow Screen Time")
             Text("DriveLock uses Screen Time to shield apps. You choose which ones.")
@@ -101,6 +102,46 @@ struct OnboardingView: View {
         }
     }
 
+    /// Full-bleed first screen: name, tagline, one button.
+    private var welcome: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("DriveLock").font(.system(size: 44, weight: .bold))
+                Text("Less distraction.\nMore miles.").font(.title3).foregroundStyle(.white.opacity(0.8))
+            }
+            .padding(.top, 48)
+            Spacer()
+            Image(systemName: "road.lanes")
+                .font(.system(size: 150, weight: .ultraLight))
+                .foregroundStyle(.white.opacity(0.18))
+                .frame(maxWidth: .infinity)
+            Spacer()
+            Text("DriveLock shields distracting apps while you drive and keeps a streak of clean drives. It can't lock your phone; opening a shielded app shows a block screen instead.")
+                .font(.subheadline).foregroundStyle(.white.opacity(0.7))
+                .padding(.bottom, 24)
+            Button(action: advance) {
+                Label("Get Started", systemImage: "arrow.right")
+                    .labelStyle(TrailingIconLabelStyle())
+                    .font(.headline)
+                    .foregroundStyle(.black)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(.white, in: Capsule())
+            }
+            Text("Drive safer. Stay present.")
+                .font(.footnote).foregroundStyle(.white.opacity(0.6))
+                .frame(maxWidth: .infinity)
+                .padding(.top, 14)
+        }
+        .padding(24)
+        .foregroundStyle(.white)
+        .background {
+            LinearGradient(colors: [Color(red: 0.06, green: 0.40, blue: 0.40), Color(red: 0.03, green: 0.10, blue: 0.17), .black],
+                           startPoint: .top, endPoint: .bottom)
+                .ignoresSafeArea()
+        }
+    }
+
     private var footer: some View {
         VStack(spacing: 16) {
             HStack(spacing: 8) {
@@ -145,5 +186,11 @@ struct OnboardingView: View {
         .frame(maxWidth: .infinity)
         .padding(.top, 24)
         .padding(.bottom, 8)
+    }
+}
+
+private struct TrailingIconLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 8) { configuration.title; configuration.icon }
     }
 }

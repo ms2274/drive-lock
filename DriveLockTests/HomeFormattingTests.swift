@@ -15,4 +15,10 @@ final class HomeFormattingTests: XCTestCase {
         XCTAssertFalse(s.hasPrefix("Today") || s.hasPrefix("Yesterday"))
         XCTAssertTrue(s.contains("9"))
     }
+
+    func testDurationFormatting() {
+        XCTAssertEqual(HomeView.duration(0), "0m")
+        XCTAssertEqual(HomeView.duration(42 * 60), "42m")
+        XCTAssertEqual(HomeView.duration((4 * 60 + 32) * 60), "4h 32m")
+    }
 }

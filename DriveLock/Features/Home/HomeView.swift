@@ -18,17 +18,18 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 20) {
+                VStack(spacing: 24) {
                     if !issues.isEmpty { issuesBanner }
-                    streakCard
-                    statusCard
+                    hero
+                    statsRow
+                    if isDriving && shielding.isShielded { passengerCard }
                     recentDrives
                 }
                 .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .padding(.bottom, 24)
             }
-            .background(Color(.systemGroupedBackground))
-            .navigationTitle("DriveLock")
+            .background(backdrop)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showSettings = true } label: { Image(systemName: "gearshape") }
@@ -40,97 +41,122 @@ struct HomeView: View {
         }
     }
 
-    // MARK: Streak
-    private var streakCard: some View {
-        let on = streak > 0
-        return VStack(spacing: 6) {
-            Label("Current streak", systemImage: "shield.lefthalf.filled")
-                .font(.subheadline.weight(.semibold))
-                .textCase(.uppercase)
-                .foregroundStyle(on ? .white.opacity(0.85) : .secondary)
-            Text("\(streak)")
-                .font(.system(size: 80, weight: .bold, design: .rounded))
-                .foregroundStyle(on ? .white : .secondary)
-                .contentTransition(.numericText())
-            Text(on ? (streak == 1 ? "clean drive in a row" : "clean drives in a row")
-                    : "Your next clean drive starts a streak")
-                .font(.headline)
-                .foregroundStyle(on ? .white.opacity(0.9) : .secondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 24)
-        .background {
-            RoundedRectangle(cornerRadius: 20)
-                .fill(on ? AnyShapeStyle(LinearGradient(colors: [.accentColor, .accentColor.opacity(0.7)],
-                                                         startPoint: .topLeading, endPoint: .bottomTrailing))
-                         : AnyShapeStyle(Color(.secondarySystemGroupedBackground)))
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(on ? "Current streak: \(streak) clean \(streak == 1 ? "drive" : "drives") in a row"
-                               : "No streak yet")
-    }
-
     // MARK: Status
     private struct Status {
         let icon: String, title: String, detail: String, color: Color
     }
 
+    private static let idleColor = Color(red: 0.45, green: 0.55, blue: 0.68)
+
     private var status: Status {
         if isDriving {
             if shielding.isShielded {
-                return Status(icon: "lock.fill", title: "Shielded",
-                              detail: "You're driving. Distracting apps are blocked.", color: .green)
+                return Status(icon: "lock.fill", title: "DriveLock is on",
+                              detail: "You're driving. Distracting apps are shielded.", color: .green)
             }
             if shielding.passengerOverride {
                 return Status(icon: "person.fill", title: "Passenger mode",
                               detail: "Shields are off for this drive.", color: .orange)
             }
-            return Status(icon: "exclamationmark.triangle.fill", title: "Nothing is shielded",
+            return Status(icon: "exclamationmark", title: "Nothing is shielded",
                           detail: "You're driving, but no apps are set to be blocked.", color: .orange)
         }
         return Status(icon: "car.fill", title: "Ready",
-                      detail: "Apps will be shielded when you start driving.", color: .secondary)
+                      detail: "Apps will be shielded when you start driving.", color: Self.idleColor)
     }
 
-    private var statusCard: some View {
-        let s = status
-        let active = s.color != .secondary
-        return VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 14) {
-                Image(systemName: s.icon)
-                    .font(.title2)
-                    .foregroundStyle(active ? .white : .secondary)
-                    .frame(width: 48, height: 48)
-                    .background(active ? s.color : Color(.tertiarySystemFill), in: Circle())
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(s.title).font(.title3.weight(.semibold))
-                    Text(s.detail).font(.subheadline).foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 0)
-            }
-            .accessibilityElement(children: .combine)
+    /// Soft glow in the state color behind the ring, on a black page.
+    private var backdrop: some View {
+        ZStack {
+            Color.black
+            RadialGradient(colors: [status.color.opacity(0.22), .clear],
+                           center: .init(x: 0.5, y: 0.22), startRadius: 0, endRadius: 320)
+        }
+        .ignoresSafeArea()
+        .animation(.easeInOut(duration: 0.6), value: status.title)
+    }
 
-            if isDriving && shielding.isShielded {
-                Button { shielding.imAPassenger() } label: {
-                    Text("I'm a passenger").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
-                Text("Turns shields off for this drive and ends your streak.")
-                    .font(.footnote).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity)
+    private var hero: some View {
+        let s = status
+        return VStack(spacing: 20) {
+            ZStack {
+                Circle()
+                    .stroke(s.color, lineWidth: 8)
+                    .shadow(color: s.color.opacity(0.8), radius: 14)
+                    .shadow(color: s.color.opacity(0.4), radius: 30)
+                Image(systemName: s.icon)
+                    .font(.system(size: 54, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .contentTransition(.symbolEffect(.replace))
+            }
+            .frame(width: 190, height: 190)
+            .padding(.top, 16)
+
+            VStack(spacing: 8) {
+                Text(s.title).font(.title2.weight(.semibold))
+                Text(s.detail)
+                    .font(.subheadline).foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             }
+            .padding(.horizontal, 24)
         }
-        .padding(16)
-        .background(active ? s.color.opacity(0.12) : Color(.secondarySystemGroupedBackground),
-                    in: RoundedRectangle(cornerRadius: 20))
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
+    }
+
+    // MARK: Stats
+    private var todaysTrips: [Trip] { trips.filter { Calendar.current.isDateInToday($0.end) } }
+
+    private var statsRow: some View {
+        let today = todaysTrips
+        let seconds = today.reduce(0) { $0 + $1.end.timeIntervalSince($1.start) }
+        let pickups = today.filter { $0.outcome != .passenger }.reduce(0) { $0 + $1.pickups }
+        return HStack(spacing: 0) {
+            stat("\(streak)", streak == 1 ? "Clean drive\nin a row" : "Clean drives\nin a row",
+                 color: streak > 0 ? .accentColor : .primary)
+            Divider().frame(height: 56)
+            stat(Self.duration(seconds), "Drive time\ntoday")
+            Divider().frame(height: 56)
+            stat("\(pickups)", pickups == 1 ? "Pickup\ntoday" : "Pickups\ntoday")
+        }
+        .padding(.vertical, 18)
+        .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 20))
+    }
+
+    private func stat(_ value: String, _ label: String, color: Color = .primary) -> some View {
+        VStack(spacing: 4) {
+            Text(value)
+                .font(.system(size: 30, weight: .semibold, design: .rounded))
+                .foregroundStyle(color)
+                .contentTransition(.numericText())
+            Text(label).font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
+    }
+
+    /// "0m", "42m", "4h 32m".
+    static func duration(_ seconds: TimeInterval) -> String {
+        let m = Int((seconds / 60).rounded())
+        return m < 60 ? "\(m)m" : "\(m / 60)h \(m % 60)m"
+    }
+
+    private var passengerCard: some View {
+        VStack(spacing: 8) {
+            Button { shielding.imAPassenger() } label: {
+                Label("I'm a passenger", systemImage: "person.fill").frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+            Text("Turns shields off for this drive and ends your streak.")
+                .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
+        }
     }
 
     // MARK: Drives
     private var recentDrives: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Recent drives").font(.title3.weight(.semibold)).padding(.leading, 4)
+            Text("Recent drives").font(.headline).padding(.leading, 4)
             if trips.isEmpty {
                 VStack(spacing: 10) {
                     Image(systemName: "road.lanes").font(.largeTitle).foregroundStyle(.tertiary)
@@ -139,7 +165,7 @@ struct HomeView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(24)
-                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
+                .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 20))
             } else {
                 VStack(spacing: 0) {
                     ForEach(Array(trips.prefix(5).enumerated()), id: \.element.persistentModelID) { i, t in
@@ -147,7 +173,7 @@ struct HomeView: View {
                         tripRow(t)
                     }
                 }
-                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
+                .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 20))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
