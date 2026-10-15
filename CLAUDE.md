@@ -14,6 +14,7 @@
 - Scoring (c): 100 start, -10/pickup, clean >= 80, drives < 0.5 mi unscored, passenger override unscored + resets streak (`ScoringRules`, all in `Scoring.swift`).
 - Pickups (c): option A (count shield-screen displays from a ShieldConfiguration extension) FAILED on device: the extension draws its screen but cannot write anything to the App Group (UserDefaults, atomic file, direct file all tried). Removed. Chosen: option B, a motion heuristic. `PickupDetector` watches gravity direction in the phone frame: >= 35 deg swing within 2 s = pickup; handling within 10 s of the last tilt is the same pickup. Only counted between drive start and the back-dated drive end. Debug screen has a "pickup test" switch to try it without a drive. Thresholds are guesses until tuned on real drives.
 - UI (d): extremely simple, one screen; no tabs. Gear opens Settings sheet. Onboarding: welcome, Screen Time + pick apps, remove Messages from Always Allowed, Location Always, done. Home shows an orange banner listing anything missing.
+- UI restyle (2026-10-15, from Mike's mockup): always-dark, glowing status ring on home, today stats (streak / drive time / pickups), icon rows in Settings, teal gradient welcome. Wording says "apps shielded", never "phone locked". `DriveLockShield` extension is back for the block screen's look only (it still can't write to the App Group). No emergency-unlock button; passenger button covers that.
 - Process: commit after each milestone; ask before adding deps/features outside spec.
 
 ## Constraints
