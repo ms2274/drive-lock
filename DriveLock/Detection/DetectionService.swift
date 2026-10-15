@@ -5,7 +5,7 @@ import Observation
 
 struct DebugLogEntry: Identifiable {
     let id = UUID()
-    let date = Date()
+    /// Already timestamped (see EventLogFile.line).
     let text: String
 }
 
@@ -37,12 +37,19 @@ final class DetectionService {
     private var lastActivity = Date.distantPast
     private var timer: Timer?
     private let idleShutdownSeconds: TimeInterval = 180
+    private let logFile: EventLogFile
 
-    init(config: DetectionConfig = .default) {
+    var logFileURL: URL { logFile.url }
+
+    init(config: DetectionConfig = .default, logFile: EventLogFile = .default) {
         detector = DriveDetector(config: config)
+        self.logFile = logFile
+        log = logFile.lines(last: 200).reversed().map { DebugLogEntry(text: $0) }
         motion.onAutomotive = { [weak self] auto, _ in Task { @MainActor in self?.handleAutomotive(auto) } }
         location.onLocations = { [weak self] locs in Task { @MainActor in self?.handleLocations(locs) } }
-        location.onSignificantWake = { [weak self] in Task { @MainActor in self?.handleWake() } }
+        location.onSignificantWake = { [weak self] fix in Task { @MainActor in self?.handleSignificantWake(fix) } }
+        location.onEvent = { [weak self] text in Task { @MainActor in self?.addLog(text) } }
+        motion.onEvent = { [weak self] text in Task { @MainActor in self?.addLog(text) } }
         location.onAuthChange = { [weak self] in Task { @MainActor in self?.refreshPermissions() } }
         gravity.onSample = { [weak self] sample, date in
             Task { @MainActor in self?.handleGravity(sample, at: date) }
@@ -65,8 +72,8 @@ final class DetectionService {
         timer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }
         }
-        addLog("started (auth: \(location.authorization.rawValue), motion: \(MotionSource.authorization.rawValue))")
-        handleWake()
+        addLog("detection started (location auth \(location.authorization.rawValue), background updates \(location.backgroundUpdatesAllowed), motion auth \(MotionSource.authorization.rawValue))")
+        handleWake(reason: "start")
     }
 
     func stop() {
@@ -74,13 +81,28 @@ final class DetectionService {
         addLog("stopped")
     }
 
+    /// Diagnostic line from outside detection (app launch, scene changes, shields).
+    func note(_ text: String) { addLog(text) }
+
+    func clearLog() { logFile.clear(); log = [] }
+
     // MARK: Inputs
-    private func handleWake() {
+    private func handleSignificantWake(_ fix: CLLocation?) {
+        if let f = fix {
+            addLog(String(format: "significant-change wake: fix %.0f s old, %.0f mph, ±%.0f m",
+                          Date().timeIntervalSince(f.timestamp), max(f.speed, 0) * 2.23694, f.horizontalAccuracy))
+        } else {
+            addLog("significant-change wake: no fix")
+        }
+        handleWake(reason: "significant change")
+    }
+
+    private func handleWake(reason: String) {
         lastActivity = Date()
-        motion.recentAutomotive(since: Date().addingTimeInterval(-300)) { [weak self] auto in
+        motion.recentAutomotive(since: Date().addingTimeInterval(-300)) { [weak self] auto, history in
             Task { @MainActor in
                 guard let self else { return }
-                self.addLog("wake: recent automotive=\(auto)")
+                self.addLog("wake (\(reason)): recent automotive=\(auto); last 5 min: \(history)")
                 if auto { self.handleAutomotive(true) }
             }
         }
@@ -144,6 +166,11 @@ final class DetectionService {
 
     private func tick() {
         feed(DetectorSample(time: now()))
+        // Heartbeat while GPS is on: gaps in these lines mean iOS suspended the app.
+        if trackingMode != .off {
+            addLog(String(format: "tick: %@, automotive %@, %.0f mph, GPS %@",
+                          String(describing: state), automotive ? "yes" : "no", speedMph, trackingMode.rawValue))
+        }
         // Battery: stop GPS after a quiet spell with no automotive signal.
         if state == .idle, !automotive, Date().timeIntervalSince(lastActivity) > idleShutdownSeconds,
            trackingMode != .off {
@@ -191,7 +218,9 @@ final class DetectionService {
     private func setMode(_ m: TrackingMode) { location.setMode(m); trackingMode = m }
 
     private func addLog(_ text: String) {
-        log.insert(DebugLogEntry(text: text), at: 0)
+        let line = EventLogFile.line(text)
+        logFile.append(line)
+        log.insert(DebugLogEntry(text: line), at: 0)
         if log.count > 200 { log.removeLast() }
     }
 }

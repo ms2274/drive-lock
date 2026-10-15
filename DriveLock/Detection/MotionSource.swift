@@ -4,6 +4,9 @@ import CoreMotion
 final class MotionSource {
     private let manager = CMMotionActivityManager()
     var onAutomotive: ((Bool, Date) -> Void)?
+    /// Diagnostic lines for the event log.
+    var onEvent: ((String) -> Void)?
+    private var lastLogged = ""
 
     static var isAvailable: Bool { CMMotionActivityManager.isActivityAvailable() }
     static var authorization: CMAuthorizationStatus { CMMotionActivityManager.authorizationStatus() }
@@ -11,18 +14,41 @@ final class MotionSource {
     func start() {
         guard Self.isAvailable else { return }
         manager.startActivityUpdates(to: .main) { [weak self] activity in
-            guard let a = activity, a.confidence != .low else { return }
-            self?.onAutomotive?(a.automotive, a.startDate)
+            guard let self, let a = activity else { return }
+            let desc = Self.describe(a)
+            if desc != self.lastLogged { self.lastLogged = desc; self.onEvent?("motion: \(desc)") }
+            guard a.confidence != .low else { return }
+            self.onAutomotive?(a.automotive, a.startDate)
         }
     }
 
     func stop() { manager.stopActivityUpdates() }
 
     /// Called on background wake-ups to catch up on what happened while suspended.
-    func recentAutomotive(since: Date, completion: @escaping (Bool) -> Void) {
-        guard Self.isAvailable else { return completion(false) }
-        manager.queryActivityStarting(from: since, to: Date(), to: .main) { acts, _ in
-            completion(acts?.last(where: { $0.confidence != .low })?.automotive ?? false)
+    /// `history` lists every activity change in the window, for the event log.
+    func recentAutomotive(since: Date, completion: @escaping (_ auto: Bool, _ history: String) -> Void) {
+        guard Self.isAvailable else { return completion(false, "motion unavailable") }
+        manager.queryActivityStarting(from: since, to: Date(), to: .main) { acts, error in
+            let acts = acts ?? []
+            let history = acts.isEmpty ? (error.map { "error \($0.localizedDescription)" } ?? "none")
+                : acts.suffix(8).map { "\(Self.time($0.startDate)) \(Self.describe($0))" }.joined(separator: ", ")
+            completion(acts.last(where: { $0.confidence != .low })?.automotive ?? false, history)
         }
+    }
+
+    static func describe(_ a: CMMotionActivity) -> String {
+        var kinds: [String] = []
+        if a.automotive { kinds.append("automotive") }
+        if a.cycling { kinds.append("cycling") }
+        if a.running { kinds.append("running") }
+        if a.walking { kinds.append("walking") }
+        if a.stationary { kinds.append("stationary") }
+        if a.unknown { kinds.append("unknown") }
+        let conf = ["low", "med", "high"][a.confidence.rawValue]
+        return "\(kinds.isEmpty ? "none" : kinds.joined(separator: "+")) (\(conf))"
+    }
+
+    private static func time(_ d: Date) -> String {
+        d.formatted(date: .omitted, time: .standard)
     }
 }

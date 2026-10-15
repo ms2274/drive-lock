@@ -56,10 +56,11 @@ struct DebugView: View {
                     }
                 }
             }
-            Section("Event log") {
+            Section("Event log (saved across relaunches)") {
+                ShareLink("Share full log", item: detection.logFileURL)
+                Button("Clear log", role: .destructive) { detection.clearLog() }
                 ForEach(detection.log) { e in
-                    Text("\(e.date.formatted(date: .omitted, time: .standard))  \(e.text)")
-                        .font(.caption.monospaced())
+                    Text(e.text).font(.caption.monospaced())
                 }
             }
         }
