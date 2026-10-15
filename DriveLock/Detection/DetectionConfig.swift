@@ -10,10 +10,9 @@ struct DetectionConfig: Equatable {
     var suspectGraceSeconds: TimeInterval = 20
     /// Above this (~5 mph) counts as "moving".
     var movingSpeed: Double = 2.24
-    /// No movement for this long ends the drive (survives red lights).
-    var stopEndSeconds: TimeInterval = 300
-    /// If still classified automotive while stationary, end after this long anyway.
-    var hardStopSeconds: TimeInterval = 600
+    /// No movement for this long ends the drive, even if iOS still says "automotive" (Mike, 2026-10-15:
+    /// shields are for moving, not for sitting in a parked car). Stops longer than this split the trip.
+    var stopEndSeconds: TimeInterval = 60
     /// Ignore location fixes worse than this (meters).
     var maxHorizontalAccuracy: Double = 50
     /// Trips shorter than this are discarded by consumers (meters).

@@ -6,7 +6,7 @@
 - Miles only.
 - Team ID `7MP9JX7CM4`. Bundle `com.michaelscardena.drivelock` (+ `.monitor`, `.tests`), App Group `group.com.michaelscardena.drivelock`.
 - Detector is a pure state machine (`DriveDetector`) with injected time; sensors wrapped in `MotionSource`/`LocationSource`; `DetectionService` wires them.
-- Start: automotive AND speed ≥ 10 mph for 30 s (back-dated). End: no movement ≥ 5 min (≥ 10 min if still "automotive"). Trip end time = last movement.
+- Start: automotive AND speed ≥ 10 mph for 30 s (back-dated). End: no movement ≥ 1 min, even if still "automotive" (Mike, 2026-10-15; accepted that stops > 1 min split the trip and lift shields). Trip end time = last movement.
 - Battery: significant-change always on; GPS low when automotive seen; high during drive; off after 3 idle min.
 - Shielding: block-list default (prefilled Messages/Social/Browsers); **Strict mode** toggle = allow-list (all except Maps/music/user-picked). Chosen: option C.
 - Shielding (b): iOS gives only opaque picker tokens, so block-list can't be prefilled; setup screen suggests Messages/Social/Browsers, and Strict mode asks the user to pick Maps + music. `ShieldingService` reacts to drive start/end; `DriveLockMonitor` extension clears shields if a 1 h safety window (renewed every 15 min while shielded) runs out. "I'm a passenger" lifts shields for the current drive only; streak penalty comes in (c).

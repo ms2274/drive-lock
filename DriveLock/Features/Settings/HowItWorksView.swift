@@ -13,7 +13,7 @@ struct HowItWorksView: View {
 
             Section {
                 Text("DriveLock can't lock your phone. It shields apps, so opening one shows a block screen. Phone calls and some system apps can't be shielded.")
-                Text("Shields come on about a minute after you start driving and stay on for about five minutes after you park.")
+                Text("Shields come on about a minute after you start driving and turn off about a minute after you stop moving. A stop longer than a minute, like a long red light, also ends the drive.")
                 Text("Pickups are counted from phone motion and are approximate.")
                 Text("Message contents are never read. Trips stay on your phone.")
             } header: { Text("What to expect") }

@@ -26,16 +26,16 @@ struct Scenario {
     static let mph10: Double = 4.47, mph30: Double = 13.4, mph60: Double = 26.8
 
     static let all: [Scenario] = [
-        Scenario(name: "Normal drive with 2 min red light", segments: [
+        Scenario(name: "Normal drive with 45 s red light", segments: [
             .init(seconds: 600, speed: mph30, automotive: true),
-            .init(seconds: 120, speed: 0, automotive: true),
+            .init(seconds: 45, speed: 0, automotive: true),
             .init(seconds: 600, speed: mph30, automotive: true),
             .init(seconds: 400, speed: 0, automotive: false)], expectsDrive: true),
-        Scenario(name: "Stop-and-go traffic (4 min stops)", segments: [
+        Scenario(name: "Stop-and-go traffic (40 s stops)", segments: [
             .init(seconds: 120, speed: mph30, automotive: true),
-            .init(seconds: 240, speed: 0, automotive: true),
+            .init(seconds: 40, speed: 0, automotive: true),
             .init(seconds: 120, speed: mph30, automotive: true),
-            .init(seconds: 240, speed: 0, automotive: true),
+            .init(seconds: 40, speed: 0, automotive: true),
             .init(seconds: 120, speed: mph30, automotive: true),
             .init(seconds: 400, speed: 0, automotive: false)], expectsDrive: true),
         Scenario(name: "Bike ride (fast, not automotive)", segments: [

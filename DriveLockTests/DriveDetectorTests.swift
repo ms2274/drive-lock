@@ -23,6 +23,30 @@ final class DriveDetectorTests: XCTestCase {
         XCTAssertEqual(ends.count, 1, "red light must not split the trip")
     }
 
+    func testStopLongerThanOneMinuteEndsTrip() {
+        let s = Scenario(name: "t", segments: [
+            .init(seconds: 300, speed: 13, automotive: true),
+            .init(seconds: 90, speed: 0, automotive: true),
+            .init(seconds: 300, speed: 13, automotive: true),
+            .init(seconds: 90, speed: 0, automotive: false)], expectsDrive: true)
+        let ends = run(s).filter { if case .driveEnded = $0 { return true } else { return false } }
+        XCTAssertEqual(ends.count, 2)
+    }
+
+    func testParkedWithAutomotiveStillEndsAfterOneMinute() {
+        let s = Scenario(name: "t", segments: [
+            .init(seconds: 300, speed: 13, automotive: true),
+            .init(seconds: 120, speed: 0, automotive: true)], expectsDrive: true)
+        var d = DriveDetector()
+        var endedAt: TimeInterval?
+        for sample in s.samples() where endedAt == nil {
+            if d.ingest(sample).contains(where: { if case .driveEnded = $0 { return true } else { return false } }) {
+                endedAt = sample.time
+            }
+        }
+        XCTAssertEqual(endedAt ?? 0, 360, accuracy: 2)
+    }
+
     func testEndTimeIsWhenMovementStoppedNotWhenDebounceExpired() {
         let s = Scenario(name: "t", segments: [
             .init(seconds: 120, speed: 13, automotive: true),

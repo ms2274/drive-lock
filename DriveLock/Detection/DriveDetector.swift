@@ -67,7 +67,7 @@ struct DriveDetector {
             meters += s.distanceDelta
             if speed >= config.movingSpeed { lastMoving = s.time }
             let stopped = s.time - lastMoving
-            if stopped >= config.stopEndSeconds && (!automotive || stopped >= config.hardStopSeconds) {
+            if stopped >= config.stopEndSeconds {
                 // Trip ends when movement stopped, not when the debounce expired.
                 let end = lastMoving
                 let total = meters
