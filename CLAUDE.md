@@ -20,6 +20,7 @@
 - Builds on Mac (Xcode 27, iOS 27 simulator; deployment target iOS 17). Regenerate with `xcodegen`, then `xcodebuild test -scheme DriveLock -destination 'platform=iOS Simulator,name=iPhone 17'`.
 
 ## Open questions / to verify on device
+- LATE START (first real drive, 2026-10-15): shields came on partway through the drive, not within ~1 min. Trip recorded 40 s / bogus 1.46 mi (stale-fix distance jump, fixed in 9f335f6). Cause of late wake not yet diagnosed: suspects are significant-change-only wake latency, `allowsBackgroundLocationUpdates` only set at launch if already Always, motion-activity not waking a suspended app. Need the debug event log from a drive to confirm.
 - Do Siri/CarPlay still read and send texts while Messages is shielded? (Messages must first be removed from Always Allowed to shield it at all.)
 - Bus/train false positives?
 - Detection delay after force-quit; behavior in Low Power Mode.
