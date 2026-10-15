@@ -22,9 +22,25 @@ struct OnboardingView: View {
                 footer
             }
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if step > 0 {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button { withAnimation { step -= 1 } } label: { Label("Back", systemImage: "chevron.left") }
+                    }
+                }
+            }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active { detection.refreshPermissions(); shielding.refresh() }
             }
+        }
+    }
+
+    /// Steps DriveLock can check. Unfinished ones offer "Skip for now" instead of "Continue".
+    private var stepIsDone: Bool {
+        switch step {
+        case 1: return shielding.isAuthorized && shielding.plan != .none
+        case 3: return detection.locationAuthorization == .authorizedAlways
+        default: return true
         }
     }
 
@@ -86,25 +102,48 @@ struct OnboardingView: View {
     }
 
     private var footer: some View {
-        HStack(spacing: 12) {
-            if step > 0 {
-                Button("Back") { step -= 1 }.buttonStyle(.bordered)
+        VStack(spacing: 16) {
+            HStack(spacing: 8) {
+                ForEach(0...lastStep, id: \.self) { i in
+                    Capsule()
+                        .fill(i == step ? Color.accentColor : Color(.tertiarySystemFill))
+                        .frame(width: i == step ? 22 : 8, height: 8)
+                }
             }
-            Spacer()
-            Button(step == lastStep ? "Start" : "Continue") {
-                if step == lastStep { shielding.hasCompletedSetup = true } else { step += 1 }
+            .animation(.snappy, value: step)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Step \(step + 1) of \(lastStep + 1)")
+
+            Group {
+                if stepIsDone {
+                    Button(action: advance) { Text(step == lastStep ? "Start" : "Continue").frame(maxWidth: .infinity) }
+                        .buttonStyle(.borderedProminent)
+                } else {
+                    Button(action: advance) { Text("Skip for now").frame(maxWidth: .infinity) }
+                        .buttonStyle(.bordered)
+                }
             }
-            .buttonStyle(.borderedProminent)
             .controlSize(.large)
         }
         .padding(16)
         .background(.bar)
     }
 
+    private func advance() {
+        if step == lastStep { shielding.hasCompletedSetup = true } else { withAnimation { step += 1 } }
+    }
+
     private func header(_ icon: String, _ title: String) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Image(systemName: icon).font(.system(size: 44)).foregroundStyle(.tint)
-            Text(title).font(.largeTitle.bold())
+        VStack(spacing: 16) {
+            Image(systemName: icon)
+                .font(.system(size: 40, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 88, height: 88)
+                .background(Color.accentColor.gradient, in: RoundedRectangle(cornerRadius: 24))
+            Text(title).font(.largeTitle.bold()).multilineTextAlignment(.center)
         }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 24)
+        .padding(.bottom, 8)
     }
 }
