@@ -80,6 +80,25 @@ struct DriveDetector {
         return events
     }
 
+    /// A drive in progress, saved so it survives the app being killed and relaunched mid-drive.
+    struct ActiveDrive: Codable, Equatable {
+        var since: TimeInterval
+        var lastMoving: TimeInterval
+        var meters: Double
+    }
+
+    var activeDrive: ActiveDrive? {
+        guard case .driving(let since) = state else { return nil }
+        return ActiveDrive(since: since, lastMoving: lastMoving, meters: meters)
+    }
+
+    /// Pick a saved drive back up. The next sample ends it normally if movement stopped long ago.
+    mutating func resume(_ d: ActiveDrive) {
+        state = .driving(since: d.since)
+        lastMoving = d.lastMoving
+        meters = d.meters
+    }
+
     /// Re-evaluate timers without new sensor data.
     mutating func tick(at time: TimeInterval) -> [DetectorEvent] {
         ingest(DetectorSample(time: time))

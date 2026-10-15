@@ -7,7 +7,9 @@ import Observation
 final class ShieldingService {
     private(set) var isShielded: Bool
     /// "I'm a passenger" was tapped: shields stay off until this drive ends.
-    private(set) var passengerOverride = false
+    private(set) var passengerOverride = false {
+        didSet { defaults.set(passengerOverride, forKey: Keys.passenger) }
+    }
     private(set) var isAuthorized: Bool
     private(set) var status = ""
 
@@ -39,6 +41,9 @@ final class ShieldingService {
         hasCompletedSetup = defaults.bool(forKey: Keys.setupDone)
         isShielded = self.store.isActive
         isAuthorized = self.store.isAuthorized
+        // Relaunched mid-drive: keep the passenger choice and keep renewing the safety window.
+        passengerOverride = defaults.bool(forKey: Keys.passenger)
+        if isShielded { startRenewing() }
     }
 
     // MARK: Drive events
@@ -129,6 +134,7 @@ final class ShieldingService {
         static let blocked = "shield.blocked"
         static let allowed = "shield.allowed"
         static let setupDone = "shield.setupDone"
+        static let passenger = "shield.passengerThisDrive"
     }
 
     private func save() {
