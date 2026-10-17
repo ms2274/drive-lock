@@ -25,15 +25,27 @@ final class MotionSource {
     func stop() { manager.stopActivityUpdates() }
 
     /// Called on background wake-ups to catch up on what happened while suspended.
+    /// `automotiveSince` is when the current unbroken automotive stretch began (nil if not automotive now).
     /// `history` lists every activity change in the window, for the event log.
-    func recentAutomotive(since: Date, completion: @escaping (_ auto: Bool, _ history: String) -> Void) {
-        guard Self.isAvailable else { return completion(false, "motion unavailable") }
+    func recentAutomotive(since: Date, completion: @escaping (_ automotiveSince: Date?, _ history: String) -> Void) {
+        guard Self.isAvailable else { return completion(nil, "motion unavailable") }
         manager.queryActivityStarting(from: since, to: Date(), to: .main) { acts, error in
             let acts = acts ?? []
             let history = acts.isEmpty ? (error.map { "error \($0.localizedDescription)" } ?? "none")
                 : acts.suffix(8).map { "\(Self.time($0.startDate)) \(Self.describe($0))" }.joined(separator: ", ")
-            completion(acts.last(where: { $0.confidence != .low })?.automotive ?? false, history)
+            completion(Self.automotiveSince(acts), history)
         }
+    }
+
+    /// Walk back from the newest confident activity while it's automotive. Low-confidence
+    /// blips (e.g. "automotive+stationary (low)" at lights) don't break the stretch.
+    static func automotiveSince(_ acts: [CMMotionActivity]) -> Date? {
+        var since: Date?
+        for a in acts.reversed() where a.confidence != .low {
+            guard a.automotive else { break }
+            since = a.startDate
+        }
+        return since
     }
 
     static func describe(_ a: CMMotionActivity) -> String {

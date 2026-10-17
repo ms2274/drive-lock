@@ -55,7 +55,7 @@ final class DetectionService {
         self.logFile = logFile
         self.defaults = defaults
         log = logFile.lines(last: 200).reversed().map { DebugLogEntry(text: $0) }
-        motion.onAutomotive = { [weak self] auto, _ in Task { @MainActor in self?.handleAutomotive(auto) } }
+        motion.onAutomotive = { [weak self] auto, start in Task { @MainActor in self?.handleAutomotive(auto, since: start) } }
         location.onLocations = { [weak self] locs in Task { @MainActor in self?.handleLocations(locs) } }
         location.onSignificantWake = { [weak self] fix in Task { @MainActor in self?.handleSignificantWake(fix) } }
         location.onEvent = { [weak self] text in Task { @MainActor in self?.addLog(text) } }
@@ -105,24 +105,31 @@ final class DetectionService {
         } else {
             addLog("significant-change wake: no fix")
         }
-        handleWake(reason: "significant change")
+        handleWake(reason: "significant change", fix: fix)
     }
 
-    private func handleWake(reason: String) {
+    private func handleWake(reason: String, fix: CLLocation? = nil) {
         lastActivity = Date()
-        motion.recentAutomotive(since: Date().addingTimeInterval(-300)) { [weak self] auto, history in
+        motion.recentAutomotive(since: Date().addingTimeInterval(-300)) { [weak self] since, history in
             Task { @MainActor in
                 guard let self else { return }
-                self.addLog("wake (\(reason)): recent automotive=\(auto); last 5 min: \(history)")
-                if auto { self.handleAutomotive(true) }
+                let sinceText = since.map { $0.formatted(date: .omitted, time: .standard) } ?? "no"
+                self.addLog("wake (\(reason)): automotive since \(sinceText); last 5 min: \(history)")
+                if let since { self.handleAutomotive(true, since: since) }
+                // The fix that woke us is real evidence (often already at speed). Use it now:
+                // iOS may suspend the app again before GPS delivers another one.
+                if let fix, Date().timeIntervalSince(fix.timestamp) < 60 {
+                    self.handleLocations([fix])
+                }
             }
         }
     }
 
-    private func handleAutomotive(_ auto: Bool) {
+    private func handleAutomotive(_ auto: Bool, since: Date? = nil) {
         automotive = auto
         if auto { lastActivity = Date() }
-        feed(DetectorSample(time: now(), isAutomotive: auto))
+        feed(DetectorSample(time: now(), isAutomotive: auto,
+                            automotiveSince: since?.timeIntervalSinceReferenceDate))
         applyMode()
     }
 

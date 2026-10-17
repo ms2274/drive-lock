@@ -22,7 +22,9 @@ final class LocationSource: NSObject, CLLocationManagerDelegate {
         super.init()
         manager.delegate = self
         manager.activityType = .automotiveNavigation
-        manager.pausesLocationUpdatesAutomatically = true
+        // GPS only runs while a drive is suspected or under way, and iOS never resumes a
+        // paused session while the app is in the background, so don't let it pause.
+        manager.pausesLocationUpdatesAutomatically = false
         manager.showsBackgroundLocationIndicator = false
     }
 

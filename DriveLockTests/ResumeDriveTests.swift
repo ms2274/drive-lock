@@ -17,10 +17,13 @@ final class ResumeDriveTests: XCTestCase {
         var resumed = DriveDetector()
         resumed.resume(try JSONDecoder().decode(DriveDetector.ActiveDrive.self, from: data))
         XCTAssertEqual(resumed.state, .driving(since: saved.since))
-        let events = resumed.ingest(DetectorSample(time: t + 3600))
+        // The first tick after relaunch is not evidence of a stop; a fix showing 0 mph plus
+        // iOS saying we're out of the car is.
+        XCTAssertEqual(resumed.ingest(DetectorSample(time: t + 3600)), [])
+        let events = resumed.ingest(DetectorSample(time: t + 3601, speed: 0, isAutomotive: false))
 
         guard case .driveEnded(let start, let end, let meters)? = events.first else {
-            return XCTFail("resumed drive should end on the first late sample, got \(events)")
+            return XCTFail("resumed drive should end once a fresh sample shows we stopped, got \(events)")
         }
         XCTAssertEqual(start, saved.since)
         XCTAssertEqual(end, saved.lastMoving, "end is the last movement before the app died")
