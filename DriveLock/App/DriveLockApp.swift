@@ -15,6 +15,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         catch { fatalError("Could not open the trip store: \(error)") }
     }()
 
+    lazy var settler = PickupSettler(context: container.mainContext)
+
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions options: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         // A "screen active" line soon after means the user opened it; none means a silent background launch.
@@ -25,24 +27,43 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             shielding.driveStarted()
             detection.note("shields on request: \(shielding.status)")
         }
-        detection.onDriveEnded = { [shielding, detection, container] start, end, meters in
+        detection.onDriveEnded = { [weak self, shielding, detection, container] start, end, meters in
             let passenger = shielding.passengerOverride
             shielding.driveEnded()
-            let context = container.mainContext
-            let trip = TripRecorder(context: context)
+            let trip = TripRecorder(context: container.mainContext)
                 .record(start: start, end: end, meters: meters,
                         pickups: detection.pickups(from: start, to: end), passenger: passenger)
-            let newestFirst = (try? context.fetch(FetchDescriptor<Trip>(sortBy: [SortDescriptor(\.end, order: .reverse)]))) ?? []
-            let streak = Streak.current(newestFirst: newestFirst.map(\.outcome))
-            if let summary = DriveSummary.make(miles: trip.miles, pickups: trip.pickups,
-                                               result: TripResult(score: trip.score, outcome: trip.outcome),
-                                               streak: streak) {
-                DriveNotifier.post(summary)
-                detection.note("summary notification: \(summary.title)")
+            // The app sleeps through most of a drive, so the live count misses pickups. When
+            // Apple's motion recorder is available, the score (and its notification) waits for it.
+            if PickupRecorder.isAvailable {
+                self?.settler.add(start: start, end: end)
+            } else {
+                self?.notifySummary(for: trip)
             }
         }
+        settler.log = { [detection] in detection.note($0) }
+        settler.onSettled = { [weak self] trip in self?.notifySummary(for: trip) }
+        detection.onWake = { [weak self, detection] in
+            if PickupRecorder.keepRecording() { detection.note("motion recorder (re)started") }
+            self?.settler.settle()
+        }
+        detection.note("motion recorder available: \(PickupRecorder.isAvailable)")
+        if PickupRecorder.keepRecording() { detection.note("motion recorder (re)started") }
         detection.start()
+        settler.settle()
         return true
+    }
+
+    private func notifySummary(for trip: Trip) {
+        let context = container.mainContext
+        let newestFirst = (try? context.fetch(FetchDescriptor<Trip>(sortBy: [SortDescriptor(\.end, order: .reverse)]))) ?? []
+        let streak = Streak.current(newestFirst: newestFirst.map(\.outcome))
+        if let summary = DriveSummary.make(miles: trip.miles, pickups: trip.pickups,
+                                           result: TripResult(score: trip.score, outcome: trip.outcome),
+                                           streak: streak) {
+            DriveNotifier.post(summary)
+            detection.note("summary notification: \(summary.title)")
+        }
     }
 
     /// Show the drive summary even if DriveLock is open when the drive ends.
@@ -73,7 +94,7 @@ struct DriveLockApp: App {
                 }
                 .onChange(of: scenePhase) { _, phase in
                     app.detection.note("screen \(phase)")
-                    if phase == .active { app.shielding.refresh(); app.detection.refreshPermissions() }
+                    if phase == .active { app.shielding.refresh(); app.detection.refreshPermissions(); app.settler.settle() }
                 }
         }
     }

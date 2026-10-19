@@ -17,4 +17,13 @@ struct TripRecorder {
         try? context.save()
         return trip
     }
+
+    /// Replace a trip's pickup count (e.g. once recorded motion data arrives) and score it again.
+    func rescore(_ trip: Trip, pickups: Int) {
+        let result = TripScorer.result(miles: trip.miles, pickups: pickups, passenger: trip.passenger, rules: rules)
+        trip.pickups = pickups
+        trip.score = result.score
+        trip.outcomeRaw = result.outcome.rawValue
+        try? context.save()
+    }
 }
