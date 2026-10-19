@@ -11,9 +11,14 @@ final class GravitySource {
         guard manager.isDeviceMotionAvailable, !manager.isDeviceMotionActive else { return }
         manager.deviceMotionUpdateInterval = 0.1
         manager.startDeviceMotionUpdates(to: .main) { [weak self] motion, _ in
-            guard let g = motion?.gravity else { return }
-            let now = Date()
-            self?.onSample?(GravitySample(time: now.timeIntervalSinceReferenceDate, x: g.x, y: g.y, z: g.z), now)
+            guard let m = motion else { return }
+            // Use when the sample was measured, not when it reached us: after iOS lets the app
+            // sleep, samples queued from before the sleep arrive in a burst, and stamping them all
+            // "now" made the orientation change across the sleep look like a pickup.
+            let measured = Date(timeIntervalSinceNow: m.timestamp - ProcessInfo.processInfo.systemUptime)
+            guard Date().timeIntervalSince(measured) < 1 else { return }
+            let g = m.gravity
+            self?.onSample?(GravitySample(time: measured.timeIntervalSinceReferenceDate, x: g.x, y: g.y, z: g.z), measured)
         }
     }
 

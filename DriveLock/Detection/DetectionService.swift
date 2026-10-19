@@ -35,6 +35,8 @@ final class DetectionService {
     private var pickupDetector = PickupDetector()
     private var lastFix: CLLocation?
     private var lastActivity = Date.distantPast
+    /// Last time any sensor input or timer reached us; a long gap means iOS had the app asleep.
+    private var lastInput = Date()
     private var timer: Timer?
     private let idleShutdownSeconds: TimeInterval = 180
     private let logFile: EventLogFile
@@ -55,8 +57,10 @@ final class DetectionService {
         self.logFile = logFile
         self.defaults = defaults
         log = logFile.lines(last: 200).reversed().map { DebugLogEntry(text: $0) }
-        motion.onAutomotive = { [weak self] auto, start in Task { @MainActor in self?.handleAutomotive(auto, since: start) } }
-        location.onLocations = { [weak self] locs in Task { @MainActor in self?.handleLocations(locs) } }
+        motion.onAutomotive = { [weak self] auto, start in
+            Task { @MainActor in self?.noteInput(); self?.handleAutomotive(auto, since: start) }
+        }
+        location.onLocations = { [weak self] locs in Task { @MainActor in self?.noteInput(); self?.handleLocations(locs) } }
         location.onSignificantWake = { [weak self] fix in Task { @MainActor in self?.handleSignificantWake(fix) } }
         location.onEvent = { [weak self] text in Task { @MainActor in self?.addLog(text) } }
         motion.onEvent = { [weak self] text in Task { @MainActor in self?.addLog(text) } }
@@ -108,9 +112,22 @@ final class DetectionService {
         handleWake(reason: "significant change", fix: fix)
     }
 
+    /// iOS often wakes the app for a few seconds with no significant-change event. Catch up on
+    /// motion history then too, so a drive that began minutes ago can start on this wake.
+    private func noteInput() {
+        let asleep = Date().timeIntervalSince(lastInput)
+        lastInput = Date()
+        if asleep > 45 && !isDriving {
+            handleWake(reason: String(format: "woke after %.0f s asleep", asleep))
+        }
+    }
+
+    private var isDriving: Bool { if case .driving = state { return true } else { return false } }
+
     private func handleWake(reason: String, fix: CLLocation? = nil) {
         lastActivity = Date()
-        motion.recentAutomotive(since: Date().addingTimeInterval(-300)) { [weak self] since, history in
+        lastInput = Date()
+        motion.recentAutomotive(since: Date().addingTimeInterval(-600)) { [weak self] since, history in
             Task { @MainActor in
                 guard let self else { return }
                 let sinceText = since.map { $0.formatted(date: .omitted, time: .standard) } ?? "no"
@@ -118,7 +135,8 @@ final class DetectionService {
                 if let since { self.handleAutomotive(true, since: since) }
                 // The fix that woke us is real evidence (often already at speed). Use it now:
                 // iOS may suspend the app again before GPS delivers another one.
-                if let fix, Date().timeIntervalSince(fix.timestamp) < 60 {
+                // Same for a fix that arrived moments ago, before the history answered.
+                if let fix = fix ?? self.lastFix, Date().timeIntervalSince(fix.timestamp) < 60 {
                     self.handleLocations([fix])
                 }
             }
@@ -136,9 +154,13 @@ final class DetectionService {
     private func handleLocations(_ locs: [CLLocation]) {
         for loc in locs {
             guard loc.horizontalAccuracy >= 0, loc.horizontalAccuracy <= detector.config.maxHorizontalAccuracy else { continue }
+            // Mid-drive, iOS lets the app sleep for minutes between fixes; the straight line across
+            // that gap is real driving (a little short on curvy roads). Outside a drive, a gap means
+            // the app woke somewhere new, so count nothing.
+            let maxGap: TimeInterval = state == .idle ? 60 : 900
             let delta = lastFix.map {
                 Self.fixDelta(meters: loc.distance(from: $0),
-                              seconds: loc.timestamp.timeIntervalSince($0.timestamp))
+                              seconds: loc.timestamp.timeIntervalSince($0.timestamp), maxGap: maxGap)
             } ?? 0
             lastFix = loc
             let speed = loc.speed >= 0 ? loc.speed : nil
@@ -184,6 +206,7 @@ final class DetectionService {
     }
 
     private func tick() {
+        noteInput()
         feed(DetectorSample(time: now()))
         saveActiveDrive()
         // Heartbeat while GPS is on: gaps in these lines mean iOS suspended the app.
