@@ -2,6 +2,7 @@ import Foundation
 import CoreLocation
 import CoreMotion
 import Observation
+import UIKit
 
 struct DebugLogEntry: Identifiable {
     let id = UUID()
@@ -27,11 +28,15 @@ final class DetectionService {
     /// Fired for consumers (shielding in milestone b, trip recording in c).
     var onDriveStarted: ((Date) -> Void)?
     var onDriveEnded: ((_ start: Date, _ end: Date, _ meters: Double) -> Void)?
+    /// Any wake-up, so other work (settling pickups) can piggyback on the few seconds iOS gives.
+    var onWake: (() -> Void)?
 
     private var detector: DriveDetector
     private let motion = MotionSource()
     private let location = LocationSource()
     private let gravity = GravitySource()
+    private let fence = ParkedFence()
+    private var awakeTask: UIBackgroundTaskIdentifier = .invalid
     private var pickupDetector = PickupDetector()
     private var lastFix: CLLocation?
     private var lastActivity = Date.distantPast
@@ -64,6 +69,8 @@ final class DetectionService {
         location.onSignificantWake = { [weak self] fix in Task { @MainActor in self?.handleSignificantWake(fix) } }
         location.onEvent = { [weak self] text in Task { @MainActor in self?.addLog(text) } }
         motion.onEvent = { [weak self] text in Task { @MainActor in self?.addLog(text) } }
+        fence.onEvent = { [weak self] text in self?.addLog(text) }
+        fence.onExit = { [weak self] in self?.handleFenceExit() }
         location.onAuthChange = { [weak self] in Task { @MainActor in self?.refreshPermissions() } }
         gravity.onSample = { [weak self] sample, date in
             Task { @MainActor in self?.handleGravity(sample, at: date) }
@@ -81,6 +88,7 @@ final class DetectionService {
     func start() {
         refreshPermissions()
         location.startMonitoring()
+        fence.start()
         motion.start()
         timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
@@ -109,6 +117,7 @@ final class DetectionService {
         } else {
             addLog("significant-change wake: no fix")
         }
+        if let f = fix, f.horizontalAccuracy >= 0, f.horizontalAccuracy <= 100, !isDriving { fence.place(at: f) }
         handleWake(reason: "significant change", fix: fix)
     }
 
@@ -124,9 +133,37 @@ final class DetectionService {
 
     private var isDriving: Bool { if case .driving = state { return true } else { return false } }
 
+    /// Left the ring around where we were parked: likely pulling away. Get a fix (to judge speed
+    /// and to drop the next ring) and catch up on motion history.
+    private func handleFenceExit() {
+        lastActivity = Date()
+        if trackingMode == .off { setMode(.low) }
+        handleWake(reason: "left parked fence")
+    }
+
+    /// iOS gives a woken app only a few seconds. Ask for up to ~25 s so a GPS fix can arrive.
+    private func holdAwake() {
+        guard awakeTask == .invalid else { return }
+        awakeTask = UIApplication.shared.beginBackgroundTask(withName: "drive-check") { [weak self] in
+            self?.releaseAwake()
+        }
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(25))
+            self?.releaseAwake()
+        }
+    }
+
+    private func releaseAwake() {
+        guard awakeTask != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(awakeTask)
+        awakeTask = .invalid
+    }
+
     private func handleWake(reason: String, fix: CLLocation? = nil) {
         lastActivity = Date()
         lastInput = Date()
+        holdAwake()
+        onWake?()
         motion.recentAutomotive(since: Date().addingTimeInterval(-600)) { [weak self] since, history in
             Task { @MainActor in
                 guard let self else { return }
@@ -163,6 +200,7 @@ final class DetectionService {
                               seconds: loc.timestamp.timeIntervalSince($0.timestamp), maxGap: maxGap)
             } ?? 0
             lastFix = loc
+            if !isDriving { fence.place(at: loc) }
             let speed = loc.speed >= 0 ? loc.speed : nil
             if let s = speed { speedMph = s * 2.23694 }
             feed(DetectorSample(time: loc.timestamp.timeIntervalSinceReferenceDate,
@@ -245,6 +283,7 @@ final class DetectionService {
             onDriveStarted?(Date(timeIntervalSinceReferenceDate: t))
         case .driveEnded(let s, let e, let m):
             gravity.stop()
+            if let f = lastFix { fence.place(at: f) }
             defaults.removeObject(forKey: Self.activeDriveKey)
             addLog(String(format: "DRIVE ENDED %.2f mi", m / 1609.344))
             onDriveEnded?(Date(timeIntervalSinceReferenceDate: s), Date(timeIntervalSinceReferenceDate: e), m)
