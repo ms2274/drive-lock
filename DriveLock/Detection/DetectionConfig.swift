@@ -19,6 +19,9 @@ struct DetectionConfig: Equatable {
     /// When iOS's motion history says "automotive" for longer than the confirm time,
     /// a drive is back-dated to when that began, but never further back than this.
     var maxBackdateSeconds: TimeInterval = 300
+    /// iOS saying "automotive" without a break for this long starts a drive even with no GPS speed
+    /// yet (Mike, 2026-10-19: speed over certainty; passengers tap "I'm a passenger").
+    var motionOnlyStartSeconds: TimeInterval = 60
     /// Ignore location fixes worse than this (meters).
     var maxHorizontalAccuracy: Double = 50
     /// Trips shorter than this are discarded by consumers (meters).

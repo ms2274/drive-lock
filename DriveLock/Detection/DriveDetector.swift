@@ -39,6 +39,9 @@ struct DriveDetector {
     private var lastGood: TimeInterval = 0     // last time start conditions held
     private var lastMoving: TimeInterval = 0   // last time speed >= movingSpeed
     private var pendingMeters: Double = 0
+    /// When the last drive ended. "Automotive" often sticks while parked with the engine on,
+    /// so a motion-only start needs an automotive stretch that began after this.
+    private var lastEnd: TimeInterval = -.infinity
 
     init(config: DetectionConfig = .default) { self.config = config }
 
@@ -53,15 +56,20 @@ struct DriveDetector {
         let gap = lastSampleTime.map { s.time - $0 } ?? .infinity
         if gap > config.staleGapSeconds { awakeSince = s.time }
         lastSampleTime = max(lastSampleTime ?? s.time, s.time)
-        if s.speed == nil && gap > config.staleGapSeconds && gap.isFinite { return [] }
+        if s.speed == nil && s.isAutomotive == nil && gap > config.staleGapSeconds && gap.isFinite { return [] }
 
         let speed = s.speed ?? 0
         let good = automotive && speed >= config.startSpeed
         var events: [DetectorEvent] = []
 
-        // iOS has seen "automotive" for long enough and we're moving fast: start now, back-dated,
-        // instead of needing 30 s of our own observation (the app may only be awake for seconds).
-        if good, let a = automotiveSince, s.time - a >= config.startConfirmSeconds {
+        // iOS has seen "automotive" for long enough and we're moving fast (or it's been automotive
+        // for a full minute): start now, back-dated, instead of needing 30 s of our own
+        // observation (the app may only be awake for seconds).
+        let fastEnough = good && automotiveSince.map { s.time - $0 >= config.startConfirmSeconds } == true
+        let longEnough = automotive && automotiveSince.map {
+            $0 > lastEnd && s.time - $0 >= config.motionOnlyStartSeconds
+        } == true
+        if fastEnough || longEnough, let a = automotiveSince {
             switch state {
             case .idle, .suspected:
                 var since = max(a, s.time - config.maxBackdateSeconds)
@@ -110,6 +118,7 @@ struct DriveDetector {
             if watchedStop >= config.stopEndSeconds || (!automotive && stopped >= config.stopEndSeconds) {
                 // Trip ends when movement stopped, not when the debounce expired.
                 let end = lastMoving
+                lastEnd = s.time
                 let total = meters
                 meters = 0
                 state = .idle

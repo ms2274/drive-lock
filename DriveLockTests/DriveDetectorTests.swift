@@ -71,10 +71,15 @@ final class DriveDetectorTests: XCTestCase {
         XCTAssertEqual(m, 1000, accuracy: 20)
     }
 
-    func testInvalidSpeedDoesNotStartDrive() {
+    /// Without any GPS speed, a drive starts only after a full minute of "automotive" (2026-10-19).
+    func testNoSpeedStartsOnlyAfterAMinuteOfAutomotive() {
         var d = DriveDetector()
-        var ev: [DetectorEvent] = []
-        for t in 1...120 { ev += d.ingest(DetectorSample(time: Double(t), speed: nil, isAutomotive: true)) }
-        XCTAssertTrue(ev.isEmpty)
+        var startedAt: TimeInterval?
+        for t in 1...120 {
+            for e in d.ingest(DetectorSample(time: Double(t), speed: nil, isAutomotive: true)) {
+                if case .driveStarted = e { startedAt = Double(t) }
+            }
+        }
+        XCTAssertEqual(startedAt ?? -1, 61, accuracy: 0.5)
     }
 }

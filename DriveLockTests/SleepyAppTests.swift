@@ -27,16 +27,15 @@ final class SleepyAppTests: XCTestCase {
 
     func testMotionHistoryStartsDriveOnTheFirstWake() {
         var d = DriveDetector()
-        _ = d.ingest(DetectorSample(time: 5000, isAutomotive: true, automotiveSince: 5000 - 120))
-        let e = d.ingest(DetectorSample(time: 5001, speed: 9))
+        var e = d.ingest(DetectorSample(time: 5000, isAutomotive: true, automotiveSince: 5000 - 120))
+        e += d.ingest(DetectorSample(time: 5001, speed: 9))
         XCTAssertEqual(started(e) ?? -1, 4880, accuracy: 0.1)
     }
 
     func testBackdateIsCapped() {
         var d = DriveDetector()
-        _ = d.ingest(DetectorSample(time: 5000, isAutomotive: true, automotiveSince: 5000 - 3600))
-        let e = d.ingest(DetectorSample(time: 5001, speed: 9))
-        XCTAssertEqual(started(e) ?? -1, 5001 - 300, accuracy: 0.1)
+        let e = d.ingest(DetectorSample(time: 5000, isAutomotive: true, automotiveSince: 5000 - 3600))
+        XCTAssertEqual(started(e) ?? -1, 5000 - 300, accuracy: 0.1)
     }
 
     func testShortAutomotiveHistoryStillNeedsConfirmation() {
@@ -73,5 +72,40 @@ final class SleepyAppTests: XCTestCase {
         _ = d.ingest(DetectorSample(time: 420))
         let e = d.ingest(DetectorSample(time: 430, speed: 0, isAutomotive: true))
         XCTAssertFalse(ended(e))
+    }
+}
+
+final class MotionOnlyStartTests: XCTestCase {
+    private func started(_ e: [DetectorEvent]) -> TimeInterval? {
+        for x in e { if case .driveStarted(let at) = x { return at } }
+        return nil
+    }
+
+    func testAMinuteOfAutomotiveStartsWithoutAnySpeed() {
+        var d = DriveDetector()
+        let e = d.ingest(DetectorSample(time: 5000, isAutomotive: true, automotiveSince: 5000 - 70))
+        XCTAssertEqual(started(e) ?? -1, 4930, accuracy: 0.1)
+    }
+
+    func testUnderAMinuteOfAutomotiveWithoutSpeedWaits() {
+        var d = DriveDetector()
+        XCTAssertNil(started(d.ingest(DetectorSample(time: 5000, isAutomotive: true, automotiveSince: 5000 - 40))))
+    }
+
+    func testParkedWithEngineOnDoesNotRestartAfterDriveEnds() {
+        var d = DriveDetector()
+        var starts = 0
+        for t in 1...300 { if started(d.ingest(DetectorSample(time: Double(t), speed: 13, isAutomotive: true))) != nil { starts += 1 } }
+        // Parked 10 minutes, iOS still says automotive the whole time.
+        for t in 301...900 { if started(d.ingest(DetectorSample(time: Double(t), speed: 0, isAutomotive: true))) != nil { starts += 1 } }
+        XCTAssertEqual(starts, 1)
+    }
+
+    func testNewAutomotiveStretchAfterParkingCanStartAgain() {
+        var d = DriveDetector()
+        for t in 1...300 { _ = d.ingest(DetectorSample(time: Double(t), speed: 13, isAutomotive: true)) }
+        for t in 301...400 { _ = d.ingest(DetectorSample(time: Double(t), speed: 0, isAutomotive: false)) }
+        let e = d.ingest(DetectorSample(time: 1000, isAutomotive: true, automotiveSince: 900))
+        XCTAssertEqual(started(e) ?? -1, 900, accuracy: 0.1)
     }
 }
