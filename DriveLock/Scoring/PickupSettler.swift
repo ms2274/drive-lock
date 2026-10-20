@@ -57,6 +57,9 @@ final class PickupSettler {
         else { return }
         if let r = result, r.samples > 0 {
             log?("pickups settled: \(r.pickups) from \(r.samples) recorded samples (live count was \(trip.pickups))\(r.complete ? "" : ", data incomplete")")
+            if !r.times.isEmpty {
+                log?("pickup times: " + r.times.map { $0.formatted(date: .omitted, time: .standard) }.joined(separator: ", "))
+            }
             TripRecorder(context: context).rescore(trip, pickups: r.pickups)
         } else {
             log?("pickups: no recorded motion data; keeping live count \(trip.pickups)")

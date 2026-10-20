@@ -7,6 +7,8 @@ import Foundation
 struct PickupRecorder {
     struct Result: Equatable {
         var pickups: Int
+        /// When each pickup happened, for the event log (to compare with what the driver remembers).
+        var times: [Date] = []
         var samples: Int
         /// Data reaches the end of the drive; otherwise it hasn't all arrived yet.
         var complete: Bool
@@ -34,9 +36,10 @@ struct PickupRecorder {
             guard let list = CMSensorRecorder().accelerometerData(from: start, to: end) else { return nil }
             var samples: [(Date, CMAcceleration)] = []
             for case let d as CMRecordedAccelerometerData in list { samples.append((d.startDate, d.acceleration)) }
-            let pickups = countPickups(samples.map { ($0.0.timeIntervalSinceReferenceDate, $0.1.x, $0.1.y, $0.1.z) })
+            let times = pickupTimes(samples.map { ($0.0.timeIntervalSinceReferenceDate, $0.1.x, $0.1.y, $0.1.z) })
             let complete = (samples.last?.0).map { end.timeIntervalSince($0) < 10 } ?? false
-            return Result(pickups: pickups, samples: samples.count, complete: complete)
+            return Result(pickups: times.count, times: times.map { Date(timeIntervalSinceReferenceDate: $0) },
+                          samples: samples.count, complete: complete)
         }.value
     }
 
@@ -44,15 +47,21 @@ struct PickupRecorder {
     /// same pickup rule the live sensor uses. Braking and turns tilt the vector far less than 35°.
     static func countPickups(_ raw: [(t: TimeInterval, x: Double, y: Double, z: Double)],
                              config: PickupConfig = .default) -> Int {
+        pickupTimes(raw, config: config).count
+    }
+
+    static func pickupTimes(_ raw: [(t: TimeInterval, x: Double, y: Double, z: Double)],
+                            config: PickupConfig = .default) -> [TimeInterval] {
         var detector = PickupDetector(config: config)
+        var times: [TimeInterval] = []
         var g: (x: Double, y: Double, z: Double)?
         for (i, s) in raw.enumerated() {
             let a = 0.15
             g = g.map { ($0.x + a * (s.x - $0.x), $0.y + a * (s.y - $0.y), $0.z + a * (s.z - $0.z)) } ?? (s.x, s.y, s.z)
             guard i % 5 == 0, let v = g else { continue }
-            detector.ingest(GravitySample(time: s.t, x: v.x, y: v.y, z: v.z))
+            if detector.ingest(GravitySample(time: s.t, x: v.x, y: v.y, z: v.z)) { times.append(s.t) }
         }
-        return detector.count
+        return times
     }
 }
 
