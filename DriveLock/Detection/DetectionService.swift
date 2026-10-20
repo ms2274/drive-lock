@@ -35,7 +35,7 @@ final class DetectionService {
     private let motion = MotionSource()
     private let location = LocationSource()
     private let gravity = GravitySource()
-    private let fence = ParkedFence()
+    @ObservationIgnored private let fence: ParkedFence
     private var awakeTask: UIBackgroundTaskIdentifier = .invalid
     private var pickupDetector = PickupDetector()
     private var lastFix: CLLocation?
@@ -61,6 +61,7 @@ final class DetectionService {
         detector = DriveDetector(config: config)
         self.logFile = logFile
         self.defaults = defaults
+        fence = ParkedFence(location: location)
         log = logFile.lines(last: 200).reversed().map { DebugLogEntry(text: $0) }
         motion.onAutomotive = { [weak self] auto, start in
             Task { @MainActor in self?.noteInput(); self?.handleAutomotive(auto, since: start) }
@@ -69,8 +70,7 @@ final class DetectionService {
         location.onSignificantWake = { [weak self] fix in Task { @MainActor in self?.handleSignificantWake(fix) } }
         location.onEvent = { [weak self] text in Task { @MainActor in self?.addLog(text) } }
         motion.onEvent = { [weak self] text in Task { @MainActor in self?.addLog(text) } }
-        fence.onEvent = { [weak self] text in self?.addLog(text) }
-        fence.onExit = { [weak self] in self?.handleFenceExit() }
+        location.onFenceExit = { [weak self] in Task { @MainActor in self?.handleFenceExit() } }
         location.onAuthChange = { [weak self] in Task { @MainActor in self?.refreshPermissions() } }
         gravity.onSample = { [weak self] sample, date in
             Task { @MainActor in self?.handleGravity(sample, at: date) }
@@ -88,7 +88,7 @@ final class DetectionService {
     func start() {
         refreshPermissions()
         location.startMonitoring()
-        fence.start()
+        fence.removeOldMonitor()
         motion.start()
         timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
@@ -117,7 +117,7 @@ final class DetectionService {
         } else {
             addLog("significant-change wake: no fix")
         }
-        if let f = fix, f.horizontalAccuracy >= 0, f.horizontalAccuracy <= 100, !isDriving { fence.place(at: f) }
+        if let f = fix, f.horizontalAccuracy >= 0, f.horizontalAccuracy <= 100, state == .idle { fence.place(at: f) }
         handleWake(reason: "significant change", fix: fix)
     }
 
@@ -199,12 +199,13 @@ final class DetectionService {
                 Self.fixDelta(meters: loc.distance(from: $0),
                               seconds: loc.timestamp.timeIntervalSince($0.timestamp), maxGap: maxGap)
             } ?? 0
+            let displacement = lastFix.map { loc.distance(from: $0) }
             lastFix = loc
-            if !isDriving { fence.place(at: loc) }
+            if state == .idle { fence.place(at: loc) }
             let speed = loc.speed >= 0 ? loc.speed : nil
             if let s = speed { speedMph = s * 2.23694 }
             feed(DetectorSample(time: loc.timestamp.timeIntervalSinceReferenceDate,
-                                speed: speed, distanceDelta: delta))
+                                speed: speed, distanceDelta: delta, displacement: displacement))
         }
     }
 

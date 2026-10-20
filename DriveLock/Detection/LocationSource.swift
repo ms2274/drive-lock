@@ -12,6 +12,7 @@ final class LocationSource: NSObject, CLLocationManagerDelegate {
     var onLocations: (([CLLocation]) -> Void)?
     var onSignificantWake: ((CLLocation?) -> Void)?
     var onAuthChange: (() -> Void)?
+    var onFenceExit: (() -> Void)?
     /// Diagnostic lines for the event log.
     var onEvent: ((String) -> Void)?
 
@@ -62,7 +63,26 @@ final class LocationSource: NSObject, CLLocationManagerDelegate {
         }
     }
 
+    private static let fenceID = "parked"
+
+    func monitorFence(around loc: CLLocation, radius: CLLocationDistance) {
+        for r in manager.monitoredRegions where r.identifier == Self.fenceID { manager.stopMonitoring(for: r) }
+        let region = CLCircularRegion(center: loc.coordinate, radius: radius, identifier: Self.fenceID)
+        region.notifyOnEntry = false
+        region.notifyOnExit = true
+        manager.startMonitoring(for: region)
+        onEvent?(String(format: "fence set (±%.0f m fix)", loc.horizontalAccuracy))
+    }
+
     // MARK: CLLocationManagerDelegate
+    func locationManager(_ m: CLLocationManager, didExitRegion region: CLRegion) {
+        guard region.identifier == Self.fenceID else { return }
+        onEvent?("LEFT parked fence")
+        onFenceExit?()
+    }
+    func locationManager(_ m: CLLocationManager, monitoringDidFailFor region: CLRegion?, withError error: Error) {
+        onEvent?("fence failed: \(error.localizedDescription)")
+    }
     func locationManager(_ m: CLLocationManager, didUpdateLocations locs: [CLLocation]) {
         if mode == .off { onSignificantWake?(locs.last) } else { onLocations?(locs) }
     }

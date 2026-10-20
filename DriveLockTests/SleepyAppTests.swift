@@ -109,3 +109,34 @@ final class MotionOnlyStartTests: XCTestCase {
         XCTAssertEqual(started(e) ?? -1, 900, accuracy: 0.1)
     }
 }
+
+final class ParkedWhileAsleepTests: XCTestCase {
+    private func ended(_ e: [DetectorEvent]) -> TimeInterval? {
+        for x in e { if case .driveEnded(_, let end, _) = x { return end } }
+        return nil
+    }
+
+    private func driving() -> DriveDetector {
+        var d = DriveDetector()
+        for t in 1...120 { _ = d.ingest(DetectorSample(time: Double(t), speed: 13, isAutomotive: true, displacement: 13)) }
+        _ = d.ingest(DetectorSample(time: 121, speed: 0, displacement: 5))   // pulled in and stopped
+        return d
+    }
+
+    /// 13:05–13:10 in the 2026-10-19 log: parked, iOS still "automotive", app woke 5 min later.
+    func testFixAtSameSpotAfterSleepEndsDrive() {
+        var d = driving()
+        _ = d.ingest(DetectorSample(time: 420))                                 // stale tick
+        let e = d.ingest(DetectorSample(time: 421, speed: 0, isAutomotive: true, displacement: 8))
+        XCTAssertEqual(ended(e) ?? -1, 120, accuracy: 1)
+    }
+
+    /// Woke at a red light 3 km down the road: we were driving, not parked.
+    func testStoppedFarFromLastFixDoesNotEndDrive() {
+        var d = driving()
+        _ = d.ingest(DetectorSample(time: 420))
+        XCTAssertNil(ended(d.ingest(DetectorSample(time: 421, speed: 0, isAutomotive: true, displacement: 3000))))
+        // ...and the light turning green 40 s later is still the same drive.
+        XCTAssertNil(ended(d.ingest(DetectorSample(time: 461, speed: 0, displacement: 0))))
+    }
+}

@@ -8,6 +8,9 @@ struct DetectorSample: Equatable {
     /// When iOS says the automotive activity began (it often knows before the app wakes up).
     var automotiveSince: TimeInterval? = nil
     var distanceDelta: Double = 0     // meters since previous fix
+    /// Straight-line meters from the previous fix, however long ago (nil if none). Tells
+    /// "parked the whole time the app slept" apart from "drove somewhere while it slept".
+    var displacement: Double? = nil
 }
 
 enum DriveState: Equatable {
@@ -111,11 +114,18 @@ struct DriveDetector {
         case .driving(let since):
             meters += s.distanceDelta
             if speed >= config.movingSpeed { lastMoving = s.time }
-            // Ends after a stop we watched for the full minute, or once iOS says we're out of
-            // the car (walking, stationary) and nothing has moved for a minute.
+            // Covered real ground while the app slept: we were moving until just now.
+            if s.speed != nil, let d = s.displacement, d > 150 { lastMoving = max(lastMoving, s.time) }
+            // Ends after a stop we watched for the full minute; once iOS says we're out of the car
+            // (walking, stationary) and nothing has moved for a minute; or when a fresh fix shows
+            // we're still where we stopped before the app fell asleep (2026-10-19: iOS kept saying
+            // "automotive" in a parked car and a drive stayed on for 2.5 hours).
             let watchedStop = s.time - max(lastMoving, awakeSince)
             let stopped = s.time - lastMoving
-            if watchedStop >= config.stopEndSeconds || (!automotive && stopped >= config.stopEndSeconds) {
+            let parkedWhileAsleep = s.speed != nil && speed < config.movingSpeed
+                && (s.displacement ?? .infinity) < 100 && stopped >= config.stopEndSeconds
+            if watchedStop >= config.stopEndSeconds || (!automotive && stopped >= config.stopEndSeconds)
+                || parkedWhileAsleep {
                 // Trip ends when movement stopped, not when the debounce expired.
                 let end = lastMoving
                 lastEnd = s.time
