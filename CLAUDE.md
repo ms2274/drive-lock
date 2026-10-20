@@ -19,6 +19,7 @@
 - UI restyle (2026-10-15, from Mike's mockup): always-dark, glowing status ring on home, today stats (streak / drive time / pickups), icon rows in Settings, teal gradient welcome. Wording says "apps shielded", never "phone locked". `DriveLockShield` extension is back for the block screen's look only (it still can't write to the App Group). No emergency-unlock button; passenger button covers that.
 - Drive summary (2026-10-15): local notification when a scored drive ends ("Clean drive: 100", score/pickups/streak); drives < 0.5 mi get none (`DriveSummary` in Notifications/). Onboarding now 7 steps: + Driving Focus guide (iOS can't be switched on by apps; we teach "Turn On Automatically: While Driving" + Auto-Reply) and notification permission.
 - Drive in progress survives app kill: detector drive + pickup times saved to UserDefaults (`detection.activeDrive`) every tick, resumed in `start()`; passenger choice saved in the App Group.
+- Help screen (2026-10-20, Mike): "Best practices" section in How DriveLock works: which apps to shield/keep, start music/nav before driving, phone out of reach, car controls, optional Driving Focus.
 - Process: commit after each milestone; ask before adding deps/features outside spec.
 
 ## Constraints
