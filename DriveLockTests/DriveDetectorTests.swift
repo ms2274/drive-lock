@@ -33,7 +33,7 @@ final class DriveDetectorTests: XCTestCase {
         XCTAssertEqual(ends.count, 2)
     }
 
-    func testParkedWithAutomotiveStillEndsAfterOneMinute() {
+    func testParkedWithAutomotiveStillEndsAfter45Seconds() {
         let s = Scenario(name: "t", segments: [
             .init(seconds: 300, speed: 13, automotive: true),
             .init(seconds: 120, speed: 0, automotive: true)], expectsDrive: true)
@@ -44,7 +44,7 @@ final class DriveDetectorTests: XCTestCase {
                 endedAt = sample.time
             }
         }
-        XCTAssertEqual(endedAt ?? 0, 360, accuracy: 2)
+        XCTAssertEqual(endedAt ?? 0, 345, accuracy: 2)
     }
 
     func testEndTimeIsWhenMovementStoppedNotWhenDebounceExpired() {

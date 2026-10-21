@@ -12,7 +12,8 @@ struct DetectionConfig: Equatable {
     var movingSpeed: Double = 2.24
     /// No movement for this long ends the drive, even if iOS still says "automotive" (Mike, 2026-10-15:
     /// shields are for moving, not for sitting in a parked car). Stops longer than this split the trip.
-    var stopEndSeconds: TimeInterval = 60
+    /// 45 s (Mike, 2026-10-21: shields must lift within 45 s of parking).
+    var stopEndSeconds: TimeInterval = 45
     /// A tick arriving this long after the previous sample means iOS had the app asleep.
     /// That gap is missing data, not proof the car stopped, so the tick is ignored.
     var staleGapSeconds: TimeInterval = 45

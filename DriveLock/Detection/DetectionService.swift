@@ -81,6 +81,7 @@ final class DetectionService {
 
     /// Re-read permission state; the Home screen shows what is missing.
     func refreshPermissions() {
+        location.keepBackgroundSession()
         locationAuthorization = location.authorization
         motionAuthorization = MotionSource.authorization
     }
@@ -91,7 +92,8 @@ final class DetectionService {
         fence.removeOldMonitor()
         motion.start()
         timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
+        // 5 s, so a 45 s stop is noticed within 50 s rather than a minute.
+        timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }
         }
         resumeSavedDrive()
@@ -244,12 +246,15 @@ final class DetectionService {
         return meters
     }
 
+    private var tickCount = 0
+
     private func tick() {
         noteInput()
         feed(DetectorSample(time: now()))
         saveActiveDrive()
-        // Heartbeat while GPS is on: gaps in these lines mean iOS suspended the app.
-        if trackingMode != .off {
+        // Heartbeat every 15 s while GPS is on: gaps in these lines mean iOS suspended the app.
+        tickCount += 1
+        if trackingMode != .off, tickCount % 3 == 0 {
             addLog(String(format: "tick: %@, automotive %@, %.0f mph, GPS %@",
                           String(describing: state), automotive ? "yes" : "no", speedMph, trackingMode.rawValue))
         }

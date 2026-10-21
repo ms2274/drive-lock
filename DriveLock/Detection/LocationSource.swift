@@ -34,8 +34,22 @@ final class LocationSource: NSObject, CLLocationManagerDelegate {
         else { manager.requestAlwaysAuthorization() }
     }
 
+    /// iOS 17's way to keep a location app running in the background. Drive logs showed iOS
+    /// suspending DriveLock within seconds even with GPS on, so it only noticed parking on its
+    /// next wake, minutes later. A new session can only start while the app is on screen; on a
+    /// background relaunch this continues one that was already running. With Always permission
+    /// iOS shows no status-bar indicator for it. Never invalidated on purpose.
+    private var backgroundSession: CLBackgroundActivitySession?
+
+    func keepBackgroundSession() {
+        guard backgroundSession == nil, authorization == .authorizedAlways else { return }
+        backgroundSession = CLBackgroundActivitySession()
+        onEvent?("background session held")
+    }
+
     func startMonitoring() {
         enableBackgroundUpdatesIfAllowed()
+        keepBackgroundSession()
         manager.startMonitoringSignificantLocationChanges()
     }
 
@@ -88,6 +102,7 @@ final class LocationSource: NSObject, CLLocationManagerDelegate {
     }
     func locationManagerDidChangeAuthorization(_ m: CLLocationManager) {
         enableBackgroundUpdatesIfAllowed()
+        keepBackgroundSession()
         onEvent?("location auth \(authorization.rawValue), background updates \(manager.allowsBackgroundLocationUpdates)")
         onAuthChange?()
     }
